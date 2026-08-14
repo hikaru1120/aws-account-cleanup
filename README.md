@@ -10,13 +10,33 @@ Normal run (no S3 report):
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
-Long S3 deletes can idle-timeout Cloud Shell. Run inside tmux so a disconnect does not kill the job:
+Long S3 deletes can idle-timeout Cloud Shell. **Start tmux first**, then run cleanup:
 
 ```bash
 tmux new -s cleanup
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
-# reconnect later: tmux attach -t cleanup
 ```
+
+If the browser/Cloud Shell disconnects:
+
+1. Re-open **Cloud Shell** in the AWS console (same account/region as before).
+2. Attach the existing session:
+
+```bash
+tmux attach -t cleanup
+```
+
+If attach says `no sessions`:
+
+```bash
+tmux ls
+```
+
+- No session: the job died. Run the same `curl ... | bash` again (cleanup is retry-safe).
+- Session exists but attach fails: `tmux attach -t cleanup -d` (detach the old client first).
+
+Detach without killing the job: `Ctrl+b` then `d`.
+
 
 Early debugging, publish leftover report as public-read S3 object:
 
