@@ -13,6 +13,7 @@ alwaysApply: true
 - Cloud Shell entry is one command: bootstrap.sh runs all modules then leftover verify.
 - After cleanup, verify leftovers with all-region Describe APIs (EC2 Global View style).
 - Cloud Shell default one-liner does not write S3 reports. `--report-s3` publishes a public-read FAIL report to `aws-cleanup-report-<account-id>`. PASS always deletes that bucket.
-- IAM: delete access keys first; skip only the current caller identity; skip service-linked roles.
+- Delete order: IAM users first (freeze); CloudTrail/Config/EventBridge/CloudWatch before S3; EC2 before VPC; CloudFront before S3; KMS after data; IAM roles last.
+- IAM users and roles are split: users at start, roles at end. Skip only the current caller identity and service-linked roles.
 - Route53: keep only apex NS/SOA; disable DNSSEC and Accelerated Recovery; poll then delete.
 - KMS: customer keys are scheduled for deletion (7 days), not immediate.

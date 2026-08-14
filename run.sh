@@ -10,7 +10,7 @@ export ERR_FILE="${RECORD_DIR}/errors.log"
 for arg in "$@"; do
   case "${arg}" in
     --report-s3) export WRITE_REPORT_S3=1 ;;
-    all|verify|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|ec2|vpc|cloudfront|s3|kms|route53|iam)
+    all|verify|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|ec2|vpc|cloudfront|s3|kms|route53)
       MODULE="${arg}"
       ;;
     "")
@@ -26,8 +26,14 @@ done
 mkdir -p "${RECORD_DIR}"
 : > "${ERR_FILE}"
 
-# Order matches billing services and delete dependencies.
+# 1 freeze IAM users  2 stop log/event producers  3 compute  4 data  5 network
+# 6 CloudFront  7 S3  8 KMS  9 Route53  10 IAM roles
 ALL_MODULES=(
+  iam_users
+  cloudtrail
+  config
+  events
+  cloudwatch
   elb
   eks
   ecs
@@ -46,13 +52,18 @@ ALL_MODULES=(
   s3
   kms
   route53
-  iam
+  iam_roles
 )
 
 run_one() {
   local name="$1"
   echo "==== ${name} ===="
-  bash "${ROOT}/modules/${name}_cleanup_module.sh" || true
+  case "${name}" in
+    iam_users) IAM_SCOPE=users bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
+    iam_roles) IAM_SCOPE=roles bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
+    iam) IAM_SCOPE=all bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
+    *) bash "${ROOT}/modules/${name}_cleanup_module.sh" || true ;;
+  esac
 }
 
 run_all() {
@@ -60,7 +71,11 @@ run_all() {
   local total="${#ALL_MODULES[@]}"
   for name in "${ALL_MODULES[@]}"; do
     echo "==== ${i}/${total} ${name} ===="
-    bash "${ROOT}/modules/${name}_cleanup_module.sh" || true
+    case "${name}" in
+      iam_users) IAM_SCOPE=users bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
+      iam_roles) IAM_SCOPE=roles bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
+      *) bash "${ROOT}/modules/${name}_cleanup_module.sh" || true ;;
+    esac
     i=$((i + 1))
   done
 }
@@ -84,6 +99,11 @@ if [[ "${MODULE}" == "all" || "${MODULE}" == "" ]]; then
 fi
 
 if [[ "${MODULE}" == "verify" ]]; then
+  finish
+fi
+
+if [[ "${MODULE}" == "iam_users" || "${MODULE}" == "iam_roles" || "${MODULE}" == "iam" ]]; then
+  run_one "${MODULE}"
   finish
 fi
 

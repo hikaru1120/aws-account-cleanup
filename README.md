@@ -19,6 +19,17 @@ curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main
 FAIL URL: `https://aws-cleanup-report-<account-id>.s3.amazonaws.com/latest_report.json`  
 PASS: that report bucket is deleted so it does not keep billing.
 
+## Delete order
+
+1. IAM **users** — stop other keys from creating resources mid-run  
+2. CloudTrail, Config, EventBridge, CloudWatch — stop writing to S3 / stop scheduled recreate  
+3. ELB, EKS, ECS, Lambda, databases, file systems, ECR  
+4. EC2 then VPC — instances before EIP/NAT  
+5. CloudFront then S3  
+6. KMS (schedule deletion after data is gone)  
+7. Route53  
+8. IAM **roles** last — after compute that used those roles  
+
 ## Modules (billing service)
 
 | Module | Scope |

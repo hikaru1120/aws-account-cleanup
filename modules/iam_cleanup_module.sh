@@ -183,25 +183,29 @@ delete_role() {
 
 main() {
   init_records
-  log "Starting IAM cleanup module"
+  local scope="${IAM_SCOPE:-all}"
+  log "Starting IAM cleanup module (scope=${scope})"
   current_identity
 
-  local users roles
-  users="$(aws iam list-users --query 'Users[].UserName' --output text | tr '\t' '\n')"
-  roles="$(aws iam list-roles --query 'Roles[].RoleName' --output text | tr '\t' '\n')"
+  if [[ "${scope}" == "all" || "${scope}" == "users" ]]; then
+    local users
+    users="$(aws iam list-users --query 'Users[].UserName' --output text | tr '\t' '\n')"
+    log "Users found: $(echo "${users}" | sed '/^$/d' | wc -l | tr -d ' ')"
+    while read -r user; do
+      [[ -z "${user}" ]] && continue
+      delete_user "${user}"
+    done <<< "${users}"
+  fi
 
-  log "Users found: $(echo "${users}" | sed '/^$/d' | wc -l | tr -d ' ')"
-  log "Roles found: $(echo "${roles}" | sed '/^$/d' | wc -l | tr -d ' ')"
-
-  while read -r user; do
-    [[ -z "${user}" ]] && continue
-    delete_user "${user}"
-  done <<< "${users}"
-
-  while read -r role; do
-    [[ -z "${role}" ]] && continue
-    delete_role "${role}"
-  done <<< "${roles}"
+  if [[ "${scope}" == "all" || "${scope}" == "roles" ]]; then
+    local roles
+    roles="$(aws iam list-roles --query 'Roles[].RoleName' --output text | tr '\t' '\n')"
+    log "Roles found: $(echo "${roles}" | sed '/^$/d' | wc -l | tr -d ' ')"
+    while read -r role; do
+      [[ -z "${role}" ]] && continue
+      delete_role "${role}"
+    done <<< "${roles}"
+  fi
 
   if [[ "${#FAILED[@]}" -gt 0 ]]; then
     log "FAILED=${#FAILED[@]}"
@@ -210,7 +214,7 @@ main() {
     exit 1
   fi
 
-  log "IAM users and roles processed"
+  log "IAM ${scope} processed"
   update_registry "SUCCESS"
 }
 
