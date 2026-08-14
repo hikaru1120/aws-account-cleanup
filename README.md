@@ -20,6 +20,8 @@ Default full run **deletes immediately**. Inventory without delete: `--scan-only
 
 Cloud Shell may recycle the environment. If the job dies, run the same `curl` again (retry-safe). Do not use tmux.
 
+If you see `container-role` / metadata **500**, credentials are not ready. Close Cloud Shell, open it again, run `aws sts get-caller-identity`, then re-run curl.
+
 Early debugging, publish leftover report as public-read S3 object:
 
 ```bash

@@ -28,6 +28,24 @@ done
 mkdir -p "${RECORD_DIR}"
 : > "${ERR_FILE}"
 
+require_aws_creds() {
+  local i
+  for i in 1 2 3 4 5; do
+    if aws sts get-caller-identity >/dev/null 2>&1; then
+      echo "caller: $(aws sts get-caller-identity --query Arn --output text)"
+      return 0
+    fi
+    echo "AWS credentials not ready (attempt ${i}/5), retrying..."
+    sleep 3
+  done
+  echo "AWS credentials unavailable (Cloud Shell container-role metadata 500 or session expired)."
+  echo "Close Cloud Shell and open it again, then run: aws sts get-caller-identity"
+  echo "When that prints an ARN, re-run the curl command."
+  exit 1
+}
+
+require_aws_creds
+
 # 1 freeze IAM users  2 stop log/event producers  3 compute  4 data  5 network
 # 6 CloudFront  7 S3  8 KMS  9 Route53  10 IAM roles
 ALL_MODULES=(
