@@ -45,14 +45,16 @@ s3="$(echo "${s3_raw}" | tr '\t' '\n' | sed '/^$/d' | grep -vc '^aws-cleanup-rep
 s3="$(n "${s3}")"
 cf="$(n "$(aws cloudfront list-distributions --query "length(DistributionList.Items[])" --output text 2>/dev/null || echo 0)")"
 
-backup_vaults="$(sum_regions 'aws_r "${region}" backup list-backup-vaults --query "length(BackupVaultList[])" --output text')"
+backup_vaults=0
 backup_rps=0
 while read -r region; do
   [[ -z "${region}" ]] && continue
   while read -r vault; do
     [[ -z "${vault}" || "${vault}" == "None" ]] && continue
-    c="$(aws_r "${region}" backup list-recovery-points-by-backup-vault --backup-vault-name "${vault}" --query 'length(RecoveryPoints[])' --output text 2>/dev/null || echo 0)"
-    backup_rps=$((backup_rps + $(n "${c}")))
+    c="$(aws_r "${region}" backup describe-backup-vault --backup-vault-name "${vault}" --query 'NumberOfRecoveryPoints' --output text 2>/dev/null || echo 0)"
+    c="$(n "${c}")"
+    backup_rps=$((backup_rps + c))
+    [[ "${c}" -gt 0 ]] && backup_vaults=$((backup_vaults + 1))
   done < <(aws_r "${region}" backup list-backup-vaults --query 'BackupVaultList[].BackupVaultName' --output text 2>/dev/null | lines)
 done < <(each_region)
 workmail_orgs="$(sum_regions 'aws_r "${region}" workmail list-organizations --query "length(OrganizationSummaries[])" --output text')"
