@@ -10,6 +10,14 @@ Normal run (no S3 report):
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
+Scan only (no delete):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- --scan-only
+```
+
+Default full run: **global scan first** (print what would be deleted), then delete. `curl | bash` cannot prompt yes/no.
+
 Long S3 deletes can idle-timeout Cloud Shell. **Start tmux first**, then run cleanup:
 
 ```bash

@@ -4,13 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE="all"
 export WRITE_REPORT_S3="${WRITE_REPORT_S3:-0}"
+export SCAN_ONLY="${SCAN_ONLY:-0}"
 export RECORD_DIR="${RECORD_DIR:-${ROOT}/verification}"
 export ERR_FILE="${RECORD_DIR}/errors.log"
 
 for arg in "$@"; do
   case "${arg}" in
     --report-s3) export WRITE_REPORT_S3=1 ;;
-    all|verify|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|ec2|vpc|cloudfront|s3|kms|route53)
+    --scan-only) export SCAN_ONLY=1 ;;
+    all|verify|scan|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|ec2|vpc|cloudfront|s3|kms|route53)
       MODULE="${arg}"
       ;;
     "")
@@ -67,6 +69,16 @@ run_one() {
 }
 
 run_all() {
+  echo "==== 1/2 global scan ===="
+  # shellcheck source=lib/plan.sh
+  source "${ROOT}/lib/plan.sh"
+  init_records
+  scan_global
+  if [[ "${SCAN_ONLY}" == "1" ]]; then
+    echo "scan-only: not deleting"
+    return 0
+  fi
+  echo "==== 2/2 delete ===="
   local i=1
   local total="${#ALL_MODULES[@]}"
   for name in "${ALL_MODULES[@]}"; do
@@ -95,7 +107,18 @@ finish() {
 
 if [[ "${MODULE}" == "all" || "${MODULE}" == "" ]]; then
   run_all
+  if [[ "${SCAN_ONLY}" == "1" ]]; then
+    echo "==== done (scan-only) ===="
+    exit 0
+  fi
   finish
+fi
+
+if [[ "${MODULE}" == "scan" ]]; then
+  source "${ROOT}/lib/plan.sh"
+  init_records
+  scan_global
+  exit 0
 fi
 
 if [[ "${MODULE}" == "verify" ]]; then
