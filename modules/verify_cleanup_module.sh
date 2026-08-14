@@ -26,7 +26,6 @@ sum_regions() {
 }
 
 init_records
-log "Starting leftover verification"
 
 account="$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo unknown)"
 log "Account ${account}"
@@ -93,7 +92,10 @@ jq -n \
   > "${REPORT_JSON}"
 
 log "VERIFY ${status}"
-echo "${leftovers}" | jq -r 'to_entries[] | "  leftover.\(.key)=\(.value)"' | while read -r line; do log "${line}"; done
+echo "${leftovers}" | jq -r 'to_entries[] | select(.value > 0) | "  leftover.\(.key)=\(.value)"' | while read -r line; do
+  [[ -z "${line}" ]] && continue
+  log "${line}"
+done
 log "Report: ${REPORT_JSON}"
 
 [[ "${status}" == "PASS" ]] && update_registry "SUCCESS" || update_registry "LEFTOVERS"

@@ -9,7 +9,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== KMS ${region} ==="
   aws_r "${region}" kms list-keys --query 'Keys[].KeyId' --output text | lines | while read -r kid; do
     mgr="$(aws_r "${region}" kms describe-key --key-id "${kid}" --query 'KeyMetadata.KeyManager' --output text 2>/dev/null || true)"
     state="$(aws_r "${region}" kms describe-key --key-id "${kid}" --query 'KeyMetadata.KeyState' --output text 2>/dev/null || true)"
@@ -22,10 +21,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting KMS module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "KMS finished"
 update_registry "SUCCESS"

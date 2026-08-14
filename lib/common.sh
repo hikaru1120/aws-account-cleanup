@@ -12,12 +12,17 @@ log() {
   [[ -n "${RUN_LOG:-}" && -f "${RUN_LOG}" ]] && printf '%s\n' "${msg}" >> "${RUN_LOG}"
 }
 
+# Default: only print real work. VERBOSE=1 for empty-region / skip noise.
+verbose() {
+  [[ "${VERBOSE:-0}" == "1" ]] && log "$@"
+}
+
 start_heartbeat() {
   local label="$1"
   stop_heartbeat
   (
     while true; do
-      sleep 15
+      sleep 30
       printf '%s\n' "[$(date '+%F %T')] [heartbeat] ${label} still running..."
     done
   ) &

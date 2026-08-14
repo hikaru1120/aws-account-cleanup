@@ -6,7 +6,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== ElastiCache ${region} ==="
   aws_r "${region}" elasticache describe-replication-groups --query 'ReplicationGroups[].ReplicationGroupId' --output text | lines | while read -r id; do
     log "  delete rg ${id}"
     quiet aws_r "${region}" elasticache delete-replication-group --replication-group-id "${id}"
@@ -18,10 +17,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting ElastiCache module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "ElastiCache finished"
 update_registry "SUCCESS"

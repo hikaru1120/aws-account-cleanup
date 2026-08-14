@@ -6,7 +6,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== FSx ${region} ==="
   aws_r "${region}" fsx describe-file-systems --query 'FileSystems[].FileSystemId' --output text | lines | while read -r fs; do
     log "  delete ${fs}"
     quiet aws_r "${region}" fsx delete-file-system --file-system-id "${fs}"
@@ -14,10 +13,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting FSx module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "FSx finished"
 update_registry "SUCCESS"

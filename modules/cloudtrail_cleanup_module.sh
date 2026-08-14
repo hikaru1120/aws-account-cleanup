@@ -8,7 +8,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== CloudTrail ${region} ==="
   aws_r "${region}" cloudtrail list-trails --query 'Trails[].Name' --output text | lines | while read -r name; do
     log "  stop+delete trail ${name}"
     quiet aws_r "${region}" cloudtrail stop-logging --name "${name}"
@@ -17,10 +16,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting CloudTrail module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "CloudTrail finished"
 update_registry "SUCCESS"

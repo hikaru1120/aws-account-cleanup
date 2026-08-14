@@ -22,7 +22,9 @@ wait_disabled_deployed() {
     fi
     status="$(aws cloudfront get-distribution --id "${id}" --query 'Distribution.Status' --output text 2>/dev/null || echo unknown)"
     enabled="$(aws cloudfront get-distribution --id "${id}" --query 'Distribution.DistributionConfig.Enabled' --output text 2>/dev/null || echo true)"
-    log "    ${id} Status=${status} Enabled=${enabled} (${elapsed}s)"
+    if [[ $((elapsed % 60)) -lt 15 ]]; then
+      log "    ${id} Status=${status} Enabled=${enabled} (${elapsed}s)"
+    fi
     if [[ "${status}" == "Deployed" && "${enabled}" == "False" ]]; then
       return 0
     fi
@@ -51,10 +53,8 @@ disable_and_delete() {
 }
 
 init_records
-log "Starting CloudFront module (disable -> wait Deployed -> delete)"
 aws cloudfront list-distributions --output json 2>/dev/null | jq -c '.DistributionList.Items[]?' | while read -r d; do
   [[ -z "${d}" ]] && continue
   disable_and_delete "$(echo "${d}" | jq -r '.Id')"
 done
-log "CloudFront finished"
 update_registry "SUCCESS"

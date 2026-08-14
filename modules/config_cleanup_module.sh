@@ -8,7 +8,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== Config ${region} ==="
   aws_r "${region}" configservice describe-configuration-recorders --query 'ConfigurationRecorders[].name' --output text | lines | while read -r name; do
     log "  stop recorder ${name}"
     quiet aws_r "${region}" configservice stop-configuration-recorder --configuration-recorder-name "${name}"
@@ -21,10 +20,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting Config module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "Config finished"
 update_registry "SUCCESS"

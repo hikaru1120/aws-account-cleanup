@@ -6,7 +6,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== OpenSearch ${region} ==="
   aws_r "${region}" opensearch list-domain-names --query 'DomainNames[].DomainName' --output text 2>/dev/null | lines | while read -r d; do
     log "  delete ${d}"
     quiet aws_r "${region}" opensearch delete-domain --domain-name "${d}"
@@ -14,10 +13,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting OpenSearch module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "OpenSearch finished"
 update_registry "SUCCESS"

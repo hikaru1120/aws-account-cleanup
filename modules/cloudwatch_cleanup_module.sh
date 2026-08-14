@@ -8,7 +8,6 @@ source "${ROOT}/lib/common.sh"
 
 cleanup_region() {
   local region="$1"
-  log "=== CloudWatch ${region} ==="
   aws_r "${region}" logs describe-log-groups --query 'logGroups[].logGroupName' --output text | lines | while read -r name; do
     aws_r "${region}" logs describe-subscription-filters --log-group-name "${name}" --query 'subscriptionFilters[].filterName' --output text 2>/dev/null | lines | while read -r f; do
       quiet aws_r "${region}" logs delete-subscription-filter --log-group-name "${name}" --filter-name "${f}"
@@ -24,10 +23,8 @@ cleanup_region() {
 }
 
 init_records
-log "Starting CloudWatch module"
 while read -r region; do
   [[ -z "${region}" ]] && continue
   cleanup_region "${region}"
 done < <(each_region)
-log "CloudWatch finished"
 update_registry "SUCCESS"

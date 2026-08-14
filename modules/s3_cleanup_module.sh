@@ -25,7 +25,6 @@ delete_batch() {
   n="$(echo "${payload}" | jq 'length')"
   [[ "${n}" -eq 0 ]] && return 0
   echo "${payload}" | jq '{Objects: map({Key,VersionId}), Quiet: true}' > /tmp/s3-del.json
-  log "    calling DeleteObjects n=${n} ..."
   quiet aws s3api delete-objects --region "${region}" --bucket "${b}" --delete file:///tmp/s3-del.json
 }
 
@@ -41,7 +40,6 @@ empty_bucket() {
   quiet aws s3api --region "${region}" put-bucket-versioning --bucket "${b}" \
     --versioning-configuration Status=Suspended
 
-  log "    abort incomplete multipart uploads"
   aws s3api --region "${region}" list-multipart-uploads --bucket "${b}" --output json 2>/dev/null \
     | jq -c '.Uploads[]?' | while read -r u; do
       [[ -z "${u}" ]] && continue
@@ -61,7 +59,6 @@ empty_bucket() {
       return 1
     fi
 
-    log "    listing object versions (batch $((batch + 1)), elapsed ${elapsed}s, deleted_approx=${deleted})"
     local page payload
     page="$(aws s3api --region "${region}" list-object-versions --bucket "${b}" --max-items 1000 --output json 2>/dev/null || echo '{}')"
     payload="$(echo "${page}" | jq '[.Versions[]?, .DeleteMarkers[]? | {Key, VersionId}]')"

@@ -64,10 +64,9 @@ is_service_linked_role() {
 
 delete_user() {
   local user="$1"
-  log "==> IAM user: ${user}"
 
   if [[ -n "${CURRENT_USER}" && "${user}" == "${CURRENT_USER}" ]]; then
-    log "   skip current user"
+    log "skip current user ${user}"
     return 0
   fi
 
@@ -75,7 +74,6 @@ delete_user() {
   aws iam list-access-keys --user-name "${user}" --query 'AccessKeyMetadata[].AccessKeyId' --output text \
     | tr '\t' '\n' | while read -r key; do
       [[ -z "${key}" ]] && continue
-      log "   delete access key ${key}"
       quiet aws iam delete-access-key --user-name "${user}" --access-key-id "${key}"
     done
 
@@ -101,7 +99,6 @@ delete_user() {
   aws iam list-mfa-devices --user-name "${user}" --query 'MFADevices[].SerialNumber' --output text \
     | tr '\t' '\n' | while read -r serial; do
       [[ -z "${serial}" ]] && continue
-      log "   deactivate MFA ${serial}"
       quiet aws iam deactivate-mfa-device --user-name "${user}" --serial-number "${serial}"
       quiet aws iam delete-virtual-mfa-device --serial-number "${serial}"
     done
@@ -131,24 +128,22 @@ delete_user() {
 
   # 4) Delete user last
   if aws iam delete-user --user-name "${user}" >/dev/null 2>&1; then
-    log "   deleted"
+    log "deleted user ${user}"
   else
-    log "   FAILED"
+    log "FAILED user ${user}"
     FAILED+=("user:${user}")
   fi
 }
 
 delete_role() {
   local role="$1"
-  log "==> IAM role: ${role}"
 
   if [[ -n "${CURRENT_ROLE}" && "${role}" == "${CURRENT_ROLE}" ]]; then
-    log "   skip current role"
+    log "skip current role ${role}"
     return 0
   fi
 
   if is_service_linked_role "${role}"; then
-    log "   skip service-linked role"
     return 0
   fi
 
@@ -174,9 +169,9 @@ delete_role() {
   quiet aws iam delete-role-permissions-boundary --role-name "${role}"
 
   if aws iam delete-role --role-name "${role}" >/dev/null 2>&1; then
-    log "   deleted"
+    log "deleted role ${role}"
   else
-    log "   FAILED"
+    log "FAILED role ${role}"
     FAILED+=("role:${role}")
   fi
 }
@@ -184,13 +179,11 @@ delete_role() {
 main() {
   init_records
   local scope="${IAM_SCOPE:-all}"
-  log "Starting IAM cleanup module (scope=${scope})"
   current_identity
 
   if [[ "${scope}" == "all" || "${scope}" == "users" ]]; then
     local users
     users="$(aws iam list-users --query 'Users[].UserName' --output text | tr '\t' '\n')"
-    log "Users found: $(echo "${users}" | sed '/^$/d' | wc -l | tr -d ' ')"
     while read -r user; do
       [[ -z "${user}" ]] && continue
       delete_user "${user}"
@@ -200,7 +193,6 @@ main() {
   if [[ "${scope}" == "all" || "${scope}" == "roles" ]]; then
     local roles
     roles="$(aws iam list-roles --query 'Roles[].RoleName' --output text | tr '\t' '\n')"
-    log "Roles found: $(echo "${roles}" | sed '/^$/d' | wc -l | tr -d ' ')"
     while read -r role; do
       [[ -z "${role}" ]] && continue
       delete_role "${role}"
@@ -214,7 +206,6 @@ main() {
     exit 1
   fi
 
-  log "IAM ${scope} processed"
   update_registry "SUCCESS"
 }
 

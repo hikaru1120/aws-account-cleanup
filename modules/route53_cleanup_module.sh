@@ -116,7 +116,6 @@ main() {
   init_registry
   : > "${RUN_LOG}"
 
-  log "Starting Route53 cleanup module" | tee -a "${RUN_LOG}"
   local zones
   zones="$(aws route53 list-hosted-zones --output json | jq -r '.HostedZones[] | "\(.Id|split("/")[-1])\t\(.Name)"')"
 
