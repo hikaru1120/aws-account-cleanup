@@ -69,16 +69,16 @@ run_one() {
 }
 
 run_all() {
-  echo "==== 1/2 global scan ===="
-  # shellcheck source=lib/plan.sh
-  source "${ROOT}/lib/plan.sh"
-  init_records
-  scan_global
   if [[ "${SCAN_ONLY}" == "1" ]]; then
+    echo "==== scan-only ===="
+    # shellcheck source=lib/plan.sh
+    source "${ROOT}/lib/plan.sh"
+    init_records
+    scan_global
     echo "scan-only: not deleting"
     return 0
   fi
-  echo "==== 2/2 delete ===="
+  echo "==== delete ===="
   local i=1
   local total="${#ALL_MODULES[@]}"
   for name in "${ALL_MODULES[@]}"; do

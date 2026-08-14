@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Global inventory of resources that cleanup will try to delete.
-# Prints only services with count > 0.
+# Inventory of resources cleanup will try to delete. Prints only count > 0.
+# AWS CLI --output text prints "None" for empty lists; treat that as empty.
 
 MODULE_NAME="${MODULE_NAME:-plan}"
 # shellcheck source=common.sh
@@ -8,19 +8,56 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 PLAN_FILE="${RECORD_DIR}/delete_plan.txt"
 MAX_NAMES=8
+SCAN_JOBS="${SCAN_JOBS:-8}"
+
+normalize_names() {
+  echo "${1:-}" | tr '\t' '\n' | sed '/^$/d' | grep -v -x 'None' || true
+}
 
 emit() {
   local kind="$1"
-  local names="$2"
-  local arr n show extra
-  names="$(echo "${names}" | tr '\t' '\n' | sed '/^$/d')"
+  local names
+  names="$(normalize_names "${2:-}")"
   [[ -z "${names}" ]] && return 0
+  local n show extra=""
   n="$(echo "${names}" | wc -l | tr -d ' ')"
   show="$(echo "${names}" | head -n "${MAX_NAMES}" | tr '\n' ' ')"
-  extra=""
   [[ "${n}" -gt "${MAX_NAMES}" ]] && extra=" ..."
   printf '%s (%s): %s%s\n' "${kind}" "${n}" "${show}" "${extra}"
   printf '%s\t%s\n' "${kind}" "${n}" >> "${PLAN_FILE}.counts"
+}
+
+plan_add() {
+  local dest="$1"
+  local kind="$2"
+  local names n show extra=""
+  names="$(normalize_names "${3:-}")"
+  [[ -z "${names}" ]] && return 0
+  n="$(echo "${names}" | wc -l | tr -d ' ')"
+  show="$(echo "${names}" | head -n "${MAX_NAMES}" | tr '\n' ' ')"
+  [[ "${n}" -gt "${MAX_NAMES}" ]] && extra=" ..."
+  printf '%s (%s): %s%s\n' "${kind}" "${n}" "${show}" "${extra}" >> "${dest}"
+  printf '%s\t%s\n' "${kind}" "${n}" >> "${dest}.counts"
+}
+
+scan_one_region() {
+  local region="$1"
+  local out="${PLAN_FILE}.${region}.txt"
+  : > "${out}"
+  : > "${out}.counts"
+  plan_add "${out}" "ec2.instances.${region}" "$(aws_r "${region}" ec2 describe-instances --filters Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "ec2.volumes.${region}" "$(aws_r "${region}" ec2 describe-volumes --query 'Volumes[].VolumeId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "ec2.snapshots.${region}" "$(aws_r "${region}" ec2 describe-snapshots --owner-ids self --query 'Snapshots[].SnapshotId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "ec2.amis.${region}" "$(aws_r "${region}" ec2 describe-images --owners self --query 'Images[].ImageId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "vpc.eips.${region}" "$(aws_r "${region}" ec2 describe-addresses --query 'Addresses[].AllocationId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "vpc.nats.${region}" "$(aws_r "${region}" ec2 describe-nat-gateways --filter Name=state,Values=pending,available --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "vpc.endpoints.${region}" "$(aws_r "${region}" ec2 describe-vpc-endpoints --query 'VpcEndpoints[].VpcEndpointId' --output text 2>/dev/null || true)"
+  plan_add "${out}" "elb.${region}" "$(aws_r "${region}" elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName' --output text 2>/dev/null || true)"
+  plan_add "${out}" "elb.classic.${region}" "$(aws_r "${region}" elb describe-load-balancers --query 'LoadBalancerDescriptions[].LoadBalancerName' --output text 2>/dev/null || true)"
+  plan_add "${out}" "rds.instances.${region}" "$(aws_r "${region}" rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier' --output text 2>/dev/null || true)"
+  plan_add "${out}" "rds.clusters.${region}" "$(aws_r "${region}" rds describe-db-clusters --query 'DBClusters[].DBClusterIdentifier' --output text 2>/dev/null || true)"
+  plan_add "${out}" "eks.${region}" "$(aws_r "${region}" eks list-clusters --query 'clusters[]' --output text 2>/dev/null || true)"
+  plan_add "${out}" "lambda.${region}" "$(aws_r "${region}" lambda list-functions --query 'Functions[].FunctionName' --output text 2>/dev/null || true)"
 }
 
 scan_global() {
@@ -37,33 +74,24 @@ scan_global() {
   emit "cloudfront.distributions" "$(aws cloudfront list-distributions --query 'DistributionList.Items[].Id' --output text 2>/dev/null || true)"
   emit "route53.zones" "$(aws route53 list-hosted-zones --query 'HostedZones[].Name' --output text 2>/dev/null || true)"
 
-  local region inst vol snap ami eip nat vpce alb clb rds
+  echo "scanning regions (parallel)..."
+  local region running=0
   while read -r region; do
     [[ -z "${region}" ]] && continue
-    printf '%s\n' "[$(date '+%F %T')] scanning ${region}..."
-    inst="$(aws_r "${region}" ec2 describe-instances --filters Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null || true)"
-    emit "ec2.instances.${region}" "${inst}"
-    vol="$(aws_r "${region}" ec2 describe-volumes --query 'Volumes[].VolumeId' --output text 2>/dev/null || true)"
-    emit "ec2.volumes.${region}" "${vol}"
-    snap="$(aws_r "${region}" ec2 describe-snapshots --owner-ids self --query 'Snapshots[].SnapshotId' --output text 2>/dev/null || true)"
-    emit "ec2.snapshots.${region}" "${snap}"
-    ami="$(aws_r "${region}" ec2 describe-images --owners self --query 'Images[].ImageId' --output text 2>/dev/null || true)"
-    emit "ec2.amis.${region}" "${ami}"
-    eip="$(aws_r "${region}" ec2 describe-addresses --query 'Addresses[].AllocationId' --output text 2>/dev/null || true)"
-    emit "vpc.eips.${region}" "${eip}"
-    nat="$(aws_r "${region}" ec2 describe-nat-gateways --filter Name=state,Values=pending,available --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null || true)"
-    emit "vpc.nats.${region}" "${nat}"
-    vpce="$(aws_r "${region}" ec2 describe-vpc-endpoints --query 'VpcEndpoints[].VpcEndpointId' --output text 2>/dev/null || true)"
-    emit "vpc.endpoints.${region}" "${vpce}"
-    alb="$(aws_r "${region}" elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName' --output text 2>/dev/null || true)"
-    emit "elb.${region}" "${alb}"
-    clb="$(aws_r "${region}" elb describe-load-balancers --query 'LoadBalancerDescriptions[].LoadBalancerName' --output text 2>/dev/null || true)"
-    emit "elb.classic.${region}" "${clb}"
-    rds="$(aws_r "${region}" rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier' --output text 2>/dev/null || true)"
-    emit "rds.instances.${region}" "${rds}"
-    emit "rds.clusters.${region}" "$(aws_r "${region}" rds describe-db-clusters --query 'DBClusters[].DBClusterIdentifier' --output text 2>/dev/null || true)"
-    emit "eks.${region}" "$(aws_r "${region}" eks list-clusters --query 'clusters[]' --output text 2>/dev/null || true)"
-    emit "lambda.${region}" "$(aws_r "${region}" lambda list-functions --query 'Functions[].FunctionName' --output text 2>/dev/null || true)"
+    scan_one_region "${region}" &
+    running=$((running + 1))
+    if [[ "${running}" -ge "${SCAN_JOBS}" ]]; then
+      wait -n 2>/dev/null || wait
+      running=$((running - 1))
+    fi
+  done < <(each_region)
+  wait
+
+  while read -r region; do
+    [[ -z "${region}" ]] && continue
+    [[ -s "${PLAN_FILE}.${region}.txt" ]] && cat "${PLAN_FILE}.${region}.txt"
+    [[ -s "${PLAN_FILE}.${region}.txt.counts" ]] && cat "${PLAN_FILE}.${region}.txt.counts" >> "${PLAN_FILE}.counts"
+    rm -f "${PLAN_FILE}.${region}.txt" "${PLAN_FILE}.${region}.txt.counts"
   done < <(each_region)
 
   local hits total

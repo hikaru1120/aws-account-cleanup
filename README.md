@@ -16,34 +16,19 @@ Scan only (no delete):
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- --scan-only
 ```
 
-Default full run: **global scan first** (print what would be deleted), then delete. `curl | bash` cannot prompt yes/no.
+Default full run **deletes immediately**. Inventory without delete: `--scan-only`. `curl | bash` cannot prompt yes/no.
 
-Long S3 deletes can idle-timeout Cloud Shell. **Start tmux first**, then run cleanup:
+**Cloud Shell already runs inside tmux.** `tmux new -s cleanup` will fail with `sessions should be nested with care` — do not nest. Just run `curl` in the existing shell.
+
+If the browser disconnects: re-open Cloud Shell (same account). If the environment was recycled, the job is gone; run the same `curl` again (retry-safe).
+
+If you are **not** already in tmux (`echo $TMUX` is empty):
 
 ```bash
 tmux new -s cleanup
-curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
-If the browser/Cloud Shell disconnects:
-
-1. Re-open **Cloud Shell** in the AWS console (same account/region as before).
-2. Attach the existing session:
-
-```bash
-tmux attach -t cleanup
-```
-
-If attach says `no sessions`:
-
-```bash
-tmux ls
-```
-
-- No session: the job died. Run the same `curl ... | bash` again (cleanup is retry-safe).
-- Session exists but attach fails: `tmux attach -t cleanup -d` (detach the old client first).
-
-Detach without killing the job: `Ctrl+b` then `d`.
+Then run curl. Reattach with `tmux attach -t cleanup` or `tmux ls` for the real session name. Detach: `Ctrl+b` then `d`.
 
 
 Early debugging, publish leftover report as public-read S3 object:
