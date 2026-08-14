@@ -8,8 +8,14 @@ cleanup_region() {
   local region="$1"
   log "=== Redshift ${region} ==="
   aws_r "${region}" redshift describe-clusters --query 'Clusters[].ClusterIdentifier' --output text | lines | while read -r id; do
-    log "  delete ${id}"
+    log "  disable deletion protection ${id}"
+    quiet aws_r "${region}" redshift modify-cluster --cluster-identifier "${id}" --no-deletion-protection
+    log "  delete cluster ${id}"
     quiet aws_r "${region}" redshift delete-cluster --cluster-identifier "${id}" --skip-final-cluster-snapshot
+  done
+  aws_r "${region}" redshift describe-cluster-snapshots --query 'Snapshots[?Status==`available`].SnapshotIdentifier' --output text | lines | while read -r sid; do
+    log "  delete snapshot ${sid}"
+    quiet aws_r "${region}" redshift delete-cluster-snapshot --snapshot-identifier "${sid}"
   done
 }
 

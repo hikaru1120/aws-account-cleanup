@@ -16,4 +16,4 @@ alwaysApply: true
 - Delete order: IAM users first (freeze); CloudTrail/Config/EventBridge/CloudWatch before S3; EC2 before VPC; CloudFront before S3; KMS after data; IAM roles last.
 - IAM users and roles are split: users at start, roles at end. Skip only the current caller identity and service-linked roles.
 - Route53: keep only apex NS/SOA; disable DNSSEC and Accelerated Recovery; poll then delete.
-- CloudFront: disable first, wait until Status=Deployed, then delete. If wait times out, retry on the next run.
+- RDS/Redshift/DynamoDB: disable deletion protection, delete the database, then delete snapshots.

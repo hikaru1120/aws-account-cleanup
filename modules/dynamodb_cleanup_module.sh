@@ -8,6 +8,8 @@ cleanup_region() {
   local region="$1"
   log "=== DynamoDB ${region} ==="
   aws_r "${region}" dynamodb list-tables --query 'TableNames[]' --output text | lines | while read -r t; do
+    log "  disable deletion protection ${t}"
+    quiet aws_r "${region}" dynamodb update-table --table-name "${t}" --no-deletion-protection-enabled
     log "  delete ${t}"
     quiet aws_r "${region}" dynamodb delete-table --table-name "${t}"
   done
