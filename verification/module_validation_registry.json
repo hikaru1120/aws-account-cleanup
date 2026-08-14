@@ -1,36 +1,27 @@
 {
   "modules": {
-    "route53_cleanup_module": {
-      "status": "PENDING_SECONDARY_VERIFICATION",
-      "last_run_at": null,
-      "last_result": null,
-      "verified_by_user": false,
-      "notes": "Needs additional real-account validation for accelerated recovery edge cases."
-    },
-    "iam_cleanup_module": {
-      "status": "PENDING_SECONDARY_VERIFICATION",
-      "last_run_at": null,
-      "last_result": null,
-      "verified_by_user": false,
-      "notes": "Needs real-account validation for users with access keys, MFA, and assumed-role Cloud Shell identity."
-    },
-    "ec2_cleanup_module": {
-      "status": "PENDING_SECONDARY_VERIFICATION",
-      "last_run_at": null,
-      "last_result": null,
-      "verified_by_user": false,
-      "notes": "Needs real-account validation across regions for ASG, ELB, EIP, volume, AMI, snapshot, NAT."
-    },
-    "billable_cleanup_module": {
-      "status": "PENDING_SECONDARY_VERIFICATION",
-      "last_run_at": null,
-      "last_result": null,
-      "verified_by_user": false,
-      "notes": "Needs real-account validation for RDS/S3/EKS and other billed services."
-    }
+    "elb_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "ec2_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "vpc_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "s3_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "cloudfront_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "kms_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "rds_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "elasticache_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "redshift_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "dynamodb_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "opensearch_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "efs_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "fsx_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "ecs_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "eks_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "lambda_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "ecr_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "route53_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "iam_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false }
   },
   "progress": {
     "verified_count": 0,
-    "total_modules": 4
+    "total_modules": 19
   }
 }

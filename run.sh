@@ -4,26 +4,55 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE="${1:-all}"
 
+# Order matches billing services and delete dependencies.
+ALL_MODULES=(
+  elb
+  eks
+  ecs
+  lambda
+  rds
+  elasticache
+  redshift
+  dynamodb
+  opensearch
+  efs
+  fsx
+  ecr
+  ec2
+  vpc
+  cloudfront
+  s3
+  kms
+  route53
+  iam
+)
+
+run_one() {
+  local name="$1"
+  echo "==== ${name} ===="
+  bash "${ROOT}/modules/${name}_cleanup_module.sh"
+}
+
 run_all() {
-  echo "==== 1/4 EC2 ===="
-  bash "${ROOT}/modules/ec2_cleanup_module.sh"
-  echo "==== 2/4 other billable ===="
-  bash "${ROOT}/modules/billable_cleanup_module.sh"
-  echo "==== 3/4 Route53 ===="
-  bash "${ROOT}/modules/route53_cleanup_module.sh"
-  echo "==== 4/4 IAM ===="
-  bash "${ROOT}/modules/iam_cleanup_module.sh"
+  local i=1
+  local total="${#ALL_MODULES[@]}"
+  for name in "${ALL_MODULES[@]}"; do
+    echo "==== ${i}/${total} ${name} ===="
+    bash "${ROOT}/modules/${name}_cleanup_module.sh"
+    i=$((i + 1))
+  done
   echo "==== all modules finished ===="
 }
 
-case "${MODULE}" in
-  all|"") run_all ;;
-  iam) bash "${ROOT}/modules/iam_cleanup_module.sh" ;;
-  ec2) bash "${ROOT}/modules/ec2_cleanup_module.sh" ;;
-  billable) bash "${ROOT}/modules/billable_cleanup_module.sh" ;;
-  route53) bash "${ROOT}/modules/route53_cleanup_module.sh" ;;
-  *)
-    echo "Usage: bash run.sh [all|iam|ec2|billable|route53]"
-    exit 1
-    ;;
-esac
+if [[ "${MODULE}" == "all" || "${MODULE}" == "" ]]; then
+  run_all
+  exit 0
+fi
+
+if [[ -f "${ROOT}/modules/${MODULE}_cleanup_module.sh" ]]; then
+  run_one "${MODULE}"
+  exit 0
+fi
+
+echo "Usage: bash run.sh [all|elb|ec2|vpc|s3|cloudfront|kms|...]"
+exit 1

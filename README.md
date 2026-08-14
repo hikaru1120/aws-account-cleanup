@@ -2,27 +2,32 @@
 
 Partner-side cleanup for reclaiming customer AWS accounts (does not close the account).
 
-## Cloud Shell: one command
+Modules follow **AWS billing service names**. Cloud Shell still uses one command.
+
+## Cloud Shell
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
-This clones the latest code and deletes common billable resources, then IAM.
+## Module map (aligned with bill)
 
-## What it covers
-
-| Module | Billable / reclaim scope |
+| Module | Bill-style scope |
 | --- | --- |
-| `ec2` | instances, ASG, ELB/ALB/NLB, EIP, EBS, AMI, snapshots, NAT |
-| `billable` | RDS, ElastiCache, Redshift, DynamoDB, OpenSearch, S3, EFS, FSx, ECS, EKS, Lambda, ECR, VPC endpoints, CloudFront |
+| `elb` | Elastic Load Balancing (CLB/ALB/NLB) |
+| `ec2` | Instances, ASG, EBS volumes, AMIs, snapshots |
+| `vpc` | Elastic IP, NAT Gateway, VPC endpoints |
+| `s3` | Amazon S3 |
+| `cloudfront` | Amazon CloudFront |
+| `kms` | KMS customer keys (schedule 7-day deletion) |
+| `rds` `elasticache` `redshift` `dynamodb` `opensearch` | databases |
+| `efs` `fsx` | file systems |
+| `ecs` `eks` `lambda` `ecr` | containers / compute |
 | `route53` | hosted zones |
-| `iam` | users and roles (keeps current SSO role) |
+| `iam` | users/roles (skip current SSO role) |
 
-Not every AWS service in existence. High-cost leftovers first; more services can be added later.
-
-## Optional: run one module
+## Optional: one service
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- iam
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- vpc
 ```
