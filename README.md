@@ -18,18 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main
 
 Default full run **deletes immediately**. Inventory without delete: `--scan-only`. `curl | bash` cannot prompt yes/no.
 
-**Cloud Shell already runs inside tmux.** `tmux new -s cleanup` will fail with `sessions should be nested with care` — do not nest. Just run `curl` in the existing shell.
-
-If the browser disconnects: re-open Cloud Shell (same account). If the environment was recycled, the job is gone; run the same `curl` again (retry-safe).
-
-If you are **not** already in tmux (`echo $TMUX` is empty):
-
-```bash
-tmux new -s cleanup
-```
-
-Then run curl. Reattach with `tmux attach -t cleanup` or `tmux ls` for the real session name. Detach: `Ctrl+b` then `d`.
-
+Cloud Shell may recycle the environment. If the job dies, run the same `curl` again (retry-safe). Do not use tmux.
 
 Early debugging, publish leftover report as public-read S3 object:
 
