@@ -10,6 +10,14 @@ Normal run (no S3 report):
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
+Long S3 deletes can idle-timeout Cloud Shell. Run inside tmux so a disconnect does not kill the job:
+
+```bash
+tmux new -s cleanup
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
+# reconnect later: tmux attach -t cleanup
+```
+
 Early debugging, publish leftover report as public-read S3 object:
 
 ```bash

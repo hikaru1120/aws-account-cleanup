@@ -8,8 +8,28 @@ ERR_FILE="${ERR_FILE:-${RECORD_DIR}/errors.log}"
 
 log() {
   local msg="[$(date '+%F %T')] [${MODULE_NAME:-app}] $*"
-  echo "${msg}"
-  [[ -n "${RUN_LOG:-}" && -f "${RUN_LOG}" ]] && echo "${msg}" >> "${RUN_LOG}"
+  printf '%s\n' "${msg}"
+  [[ -n "${RUN_LOG:-}" && -f "${RUN_LOG}" ]] && printf '%s\n' "${msg}" >> "${RUN_LOG}"
+}
+
+start_heartbeat() {
+  local label="$1"
+  stop_heartbeat
+  (
+    while true; do
+      sleep 15
+      printf '%s\n' "[$(date '+%F %T')] [heartbeat] ${label} still running..."
+    done
+  ) &
+  HEARTBEAT_PID=$!
+}
+
+stop_heartbeat() {
+  if [[ -n "${HEARTBEAT_PID:-}" ]]; then
+    kill "${HEARTBEAT_PID}" 2>/dev/null || true
+    wait "${HEARTBEAT_PID}" 2>/dev/null || true
+    HEARTBEAT_PID=""
+  fi
 }
 
 quiet() {

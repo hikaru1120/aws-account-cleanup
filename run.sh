@@ -70,7 +70,7 @@ run_all() {
   local i=1
   local total="${#ALL_MODULES[@]}"
   for name in "${ALL_MODULES[@]}"; do
-    echo "==== ${i}/${total} ${name} ===="
+    echo "==== module ${i}/${total}: ${name} ===="
     case "${name}" in
       iam_users) IAM_SCOPE=users bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
       iam_roles) IAM_SCOPE=roles bash "${ROOT}/modules/iam_cleanup_module.sh" || true ;;
