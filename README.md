@@ -33,12 +33,13 @@ PASS: that report bucket is deleted so it does not keep billing.
 
 1. IAM **users** — stop other keys from creating resources mid-run  
 2. CloudTrail, Config, EventBridge, CloudWatch — stop writing to S3 / stop scheduled recreate  
-3. ELB, EKS, ECS, Lambda, databases, file systems, ECR  
-4. EC2 then VPC — instances before EIP/NAT  
-5. CloudFront then S3  
-6. KMS (schedule deletion after data is gone)  
-7. Route53  
-8. IAM **roles** last — after compute that used those roles  
+3. AWS Backup (plans, recovery points, vaults)  
+4. ELB, EKS, ECS, Lambda, databases, file systems, ECR, WorkMail  
+5. EC2 then VPC — instances before EIP/NAT  
+6. CloudFront then S3  
+7. KMS (schedule deletion after data is gone)  
+8. Route53  
+9. IAM **roles** last — after compute that used those roles  
 
 ## Modules (billing service)
 
@@ -49,5 +50,7 @@ PASS: that report bucket is deleted so it does not keep billing.
 | `vpc` | EIP, NAT, VPC endpoints |
 | `s3` | Empty with 1000-object batches, then delete bucket |
 | `rds` and other named services | as named |
+| `backup` | Plans, recovery points, vaults, legal holds |  
+| `workmail` | Organizations, users, groups, resources |  
 | `route53` `iam` | DNS / identity |
 | `verify` | leftover check only |

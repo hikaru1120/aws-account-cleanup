@@ -45,6 +45,18 @@ s3="$(echo "${s3_raw}" | tr '\t' '\n' | sed '/^$/d' | grep -vc '^aws-cleanup-rep
 s3="$(n "${s3}")"
 cf="$(n "$(aws cloudfront list-distributions --query "length(DistributionList.Items[])" --output text 2>/dev/null || echo 0)")"
 
+backup_vaults="$(sum_regions 'aws_r "${region}" backup list-backup-vaults --query "length(BackupVaultList[])" --output text')"
+backup_rps=0
+while read -r region; do
+  [[ -z "${region}" ]] && continue
+  while read -r vault; do
+    [[ -z "${vault}" || "${vault}" == "None" ]] && continue
+    c="$(aws_r "${region}" backup list-recovery-points-by-backup-vault --backup-vault-name "${vault}" --query 'length(RecoveryPoints[])' --output text 2>/dev/null || echo 0)"
+    backup_rps=$((backup_rps + $(n "${c}")))
+  done < <(aws_r "${region}" backup list-backup-vaults --query 'BackupVaultList[].BackupVaultName' --output text 2>/dev/null | lines)
+done < <(each_region)
+workmail_orgs="$(sum_regions 'aws_r "${region}" workmail list-organizations --query "length(OrganizationSummaries[])" --output text')"
+
 explorer_ec2="unavailable"
 if aws resource-explorer-2 list-indexes --output json >/dev/null 2>&1; then
   explorer_ec2="$(aws resource-explorer-2 search --query-string 'resourcetype:ec2:instance' --query 'length(Resources[])' --output text 2>/dev/null || echo unavailable)"
@@ -72,7 +84,10 @@ leftovers="$(jq -n \
   --argjson rds "${rds}" \
   --argjson s3 "${s3}" \
   --argjson cloudfront "${cf}" \
-  '{ec2_instances:$ec2_instances,ec2_volumes:$ec2_volumes,ec2_snapshots:$ec2_snapshots,ec2_amis:$ec2_amis,vpc_eips:$vpc_eips,vpc_nats:$vpc_nats,vpc_endpoints:$vpc_endpoints,elb:$elb,rds:$rds,s3:$s3,cloudfront:$cloudfront}')"
+  --argjson backup_vaults "${backup_vaults}" \
+  --argjson backup_recovery_points "${backup_rps}" \
+  --argjson workmail_orgs "${workmail_orgs}" \
+  '{ec2_instances:$ec2_instances,ec2_volumes:$ec2_volumes,ec2_snapshots:$ec2_snapshots,ec2_amis:$ec2_amis,vpc_eips:$vpc_eips,vpc_nats:$vpc_nats,vpc_endpoints:$vpc_endpoints,elb:$elb,rds:$rds,s3:$s3,cloudfront:$cloudfront,backup_vaults:$backup_vaults,backup_recovery_points:$backup_recovery_points,workmail_orgs:$workmail_orgs}')"
 
 nonzero="$(echo "${leftovers}" | jq '[.[] | select(. > 0)] | length')"
 status="PASS"

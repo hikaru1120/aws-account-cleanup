@@ -12,7 +12,7 @@ for arg in "$@"; do
   case "${arg}" in
     --report-s3) export WRITE_REPORT_S3=1 ;;
     --scan-only) export SCAN_ONLY=1 ;;
-    all|verify|scan|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|ec2|vpc|cloudfront|s3|kms|route53)
+    all|verify|scan|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|backup|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|workmail|ec2|vpc|cloudfront|s3|kms|route53)
       MODULE="${arg}"
       ;;
     "")
@@ -36,6 +36,7 @@ ALL_MODULES=(
   config
   events
   cloudwatch
+  backup
   elb
   eks
   ecs
@@ -48,6 +49,7 @@ ALL_MODULES=(
   efs
   fsx
   ecr
+  workmail
   ec2
   vpc
   cloudfront

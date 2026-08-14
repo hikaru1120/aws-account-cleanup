@@ -22,10 +22,12 @@
     "cloudtrail_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "config_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "events_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
-    "cloudwatch_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false }
+    "cloudwatch_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "backup_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "workmail_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false }
   },
   "progress": {
     "verified_count": 0,
-    "total_modules": 23
+    "total_modules": 25
   }
 }
