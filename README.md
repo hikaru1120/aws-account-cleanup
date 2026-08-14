@@ -37,7 +37,7 @@ PASS: that report bucket is deleted so it does not keep billing.
 | `elb` | Load balancers |
 | `ec2` | Instances, ASG, EBS, AMI, snapshots |
 | `vpc` | EIP, NAT, VPC endpoints |
-| `s3` `cloudfront` `kms` | storage / CDN / keys |
+| `s3` | Empty with 1000-object batches, then delete bucket |
 | `rds` and other named services | as named |
 | `route53` `iam` | DNS / identity |
 | `verify` | leftover check only |

@@ -16,4 +16,4 @@ alwaysApply: true
 - Delete order: IAM users first (freeze); CloudTrail/Config/EventBridge/CloudWatch before S3; EC2 before VPC; CloudFront before S3; KMS after data; IAM roles last.
 - IAM users and roles are split: users at start, roles at end. Skip only the current caller identity and service-linked roles.
 - Route53: keep only apex NS/SOA; disable DNSSEC and Accelerated Recovery; poll then delete.
-- KMS: customer keys are scheduled for deletion (7 days), not immediate.
+- S3: empty with batched DeleteObjects (1000) and progress logs; per-bucket time cap; abort multipart uploads; do not delete object-by-object.
