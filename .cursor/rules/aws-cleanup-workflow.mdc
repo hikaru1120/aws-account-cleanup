@@ -12,7 +12,7 @@ alwaysApply: true
 - Keep each module small. Shared helpers live in `lib/common.sh`.
 - Cloud Shell entry is one command: bootstrap.sh runs all modules then leftover verify.
 - After cleanup, verify leftovers with all-region Describe APIs (EC2 Global View style).
-- Do not use GitHub tokens in Cloud Shell. Write FAIL reports to private bucket `aws-cleanup-report-<account-id>`. On PASS, delete that bucket so it does not keep billing. Exclude this bucket from S3 leftover counts and from the S3 delete module.
+- Cloud Shell default one-liner does not write S3 reports. `--report-s3` publishes a public-read FAIL report to `aws-cleanup-report-<account-id>`. PASS always deletes that bucket.
 - IAM: delete access keys first; skip only the current caller identity; skip service-linked roles.
 - Route53: keep only apex NS/SOA; disable DNSSEC and Accelerated Recovery; poll then delete.
 - KMS: customer keys are scheduled for deletion (7 days), not immediate.

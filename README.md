@@ -2,16 +2,22 @@
 
 Partner-side cleanup for reclaiming customer AWS accounts (does not close the account).
 
-## Cloud Shell (one command)
+## Cloud Shell
+
+Normal run (no S3 report):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
-After delete, leftover check runs (all-region describe). Result handling:
+Early debugging, publish leftover report as public-read S3 object:
 
-- **PASS**: if a previous report bucket exists, it is deleted (no leftover S3 charge)
-- **FAIL**: report is stored at `s3://aws-cleanup-report-<account-id>/latest_report.json` (private). Open that object in the console instead of pasting Cloud Shell logs. Re-run the same one-liner after fixes; PASS will remove this bucket.
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- --report-s3
+```
+
+FAIL URL: `https://aws-cleanup-report-<account-id>.s3.amazonaws.com/latest_report.json`  
+PASS: that report bucket is deleted so it does not keep billing.
 
 ## Modules (billing service)
 
