@@ -2,32 +2,36 @@
 
 Partner-side cleanup for reclaiming customer AWS accounts (does not close the account).
 
-Modules follow **AWS billing service names**. Cloud Shell still uses one command.
-
-## Cloud Shell
+## Cloud Shell (one command)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
-## Module map (aligned with bill)
+After delete, it runs an independent leftover check (all-region describe, like EC2 Global View) and writes `verification/latest_report.json`.
 
-| Module | Bill-style scope |
-| --- | --- |
-| `elb` | Elastic Load Balancing (CLB/ALB/NLB) |
-| `ec2` | Instances, ASG, EBS volumes, AMIs, snapshots |
-| `vpc` | Elastic IP, NAT Gateway, VPC endpoints |
-| `s3` | Amazon S3 |
-| `cloudfront` | Amazon CloudFront |
-| `kms` | KMS customer keys (schedule 7-day deletion) |
-| `rds` `elasticache` `redshift` `dynamodb` `opensearch` | databases |
-| `efs` `fsx` | file systems |
-| `ecs` `eks` `lambda` `ecr` | containers / compute |
-| `route53` | hosted zones |
-| `iam` | users/roles (skip current SSO role) |
+## Feedback (no log paste)
 
-## Optional: one service
+I cannot read Cloud Shell. Set one of these so the report comes back automatically:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- vpc
+export CLEANUP_GITHUB_TOKEN=ghp_xxx   # creates a counts-only GitHub issue
+# or
+export REPORT_WEBHOOK=https://example.com/hook
+# or
+export REPORT_S3=s3://your-bucket/cleanup-report.json
 ```
+
+Then the same one-liner. Issues are counts only (no account/resource IDs).
+
+## Modules (billing service)
+
+| Module | Scope |
+| --- | --- |
+| `elb` | Load balancers |
+| `ec2` | Instances, ASG, EBS, AMI, snapshots |
+| `vpc` | EIP, NAT, VPC endpoints |
+| `s3` `cloudfront` `kms` | storage / CDN / keys |
+| `rds` and other data/compute modules | as named |
+| `route53` `iam` | DNS / identity |
+| `verify` | leftover check only |

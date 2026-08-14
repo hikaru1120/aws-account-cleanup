@@ -4,19 +4,28 @@
 RECORD_DIR="${RECORD_DIR:-./verification}"
 REGISTRY_FILE="${REGISTRY_FILE:-${RECORD_DIR}/module_validation_registry.json}"
 RUN_LOG="${RECORD_DIR}/${MODULE_NAME}_runs.log"
+ERR_FILE="${ERR_FILE:-${RECORD_DIR}/errors.log}"
 
 log() {
-  local msg="[$(date '+%F %T')] $*"
+  local msg="[$(date '+%F %T')] [${MODULE_NAME:-app}] $*"
   echo "${msg}"
   [[ -n "${RUN_LOG:-}" && -f "${RUN_LOG}" ]] && echo "${msg}" >> "${RUN_LOG}"
 }
 
-quiet() { "$@" >/dev/null 2>&1 || true; }
+quiet() {
+  local out
+  if ! out="$("$@" 2>&1)"; then
+    mkdir -p "$(dirname "${ERR_FILE}")"
+    echo "[${MODULE_NAME:-app}] $* | ${out}" >> "${ERR_FILE}"
+  fi
+}
+
 aws_r() { local r="$1"; shift; aws --region "$r" "$@"; }
 lines() { tr '\t' '\n' | sed '/^$/d'; }
 
 init_records() {
   mkdir -p "${RECORD_DIR}"
+  : >> "${ERR_FILE}"
   : > "${RUN_LOG}"
 }
 
@@ -35,4 +44,10 @@ update_registry() {
 
 each_region() {
   aws ec2 describe-regions --query 'Regions[].RegionName' --output text | lines
+}
+
+count_text() {
+  local v="${1:-0}"
+  [[ "${v}" == "None" || -z "${v}" ]] && v=0
+  echo "${v}"
 }

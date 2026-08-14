@@ -10,7 +10,9 @@ alwaysApply: true
 - Elastic IP and NAT belong to VPC, not EC2. Load balancers belong to ELB, not EC2.
 - Mark new modules as `PENDING_SECONDARY_VERIFICATION`.
 - Keep each module small. Shared helpers live in `lib/common.sh`.
-- Cloud Shell entry is one command: bootstrap.sh runs all modules.
+- Cloud Shell entry is one command: bootstrap.sh runs all modules then leftover verify + report send.
+- After cleanup, verify leftovers with all-region Describe APIs (EC2 Global View style). Also try Resource Explorer and Cost Explorer when enabled.
+- Do not ask the user to paste Cloud Shell logs. Use `verification/latest_report.json` and optional GitHub issue / webhook / S3 report (counts only on public GitHub).
 - IAM: delete access keys first; skip only the current caller identity; skip service-linked roles.
 - Route53: keep only apex NS/SOA; disable DNSSEC and Accelerated Recovery; poll then delete.
 - KMS: customer keys are scheduled for deletion (7 days), not immediate.
