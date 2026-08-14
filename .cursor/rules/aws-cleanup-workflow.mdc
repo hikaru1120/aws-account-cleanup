@@ -1,0 +1,25 @@
+---
+description: Persistent workflow for AWS cleanup tasks
+alwaysApply: true
+---
+
+# AWS Cleanup Workflow
+
+- Always explain implementation approach before code changes.
+- Build cleanup logic as independent modules (one concern per module).
+- Mark new modules as `PENDING_SECONDARY_VERIFICATION` by default.
+- Maintain validation progress in `verification/module_validation_registry.json`.
+- Provide progress feedback after each run: verified modules vs unverified modules.
+- Keep each service module small. Put retries/logging in shared helpers later, do not copy heavy logic.
+- Scope modules by console/billing surface, not by raw AWS API name. Example: `ec2` module includes ELB/NAT because they are billed with EC2 console resources.
+- For Route53, always handle:
+  - apex-only NS/SOA retention
+  - DNSSEC disable
+  - Accelerated Recovery disable
+  - status polling and retry delete
+- For IAM, always handle:
+  - delete access keys before deleting the user
+  - then MFA, login profile, policies, groups
+  - skip current caller identity only (including the current SSO assumed role)
+  - skip AWS service-linked roles
+- For EC2, delete in order: ASG -> load balancers -> NAT -> instances -> EIP -> volumes -> AMIs -> snapshots.
