@@ -1,51 +1,51 @@
 #!/usr/bin/env bash
-# Send leftover report so the operator does not paste Cloud Shell logs.
-# Default: GitHub issue with COUNTS ONLY (no account/resource IDs) on the public repo.
+# Write leftover report to a private S3 bucket in the same account.
+# PASS: delete that bucket so it does not keep billing.
+# FAIL: keep the bucket for inspection in the console.
+
+REPORT_BUCKET_PREFIX="aws-cleanup-report"
+
+report_bucket_name() {
+  local account
+  account="$(aws sts get-caller-identity --query Account --output text)"
+  echo "${REPORT_BUCKET_PREFIX}-${account}"
+}
+
+delete_report_bucket() {
+  local bucket="$1"
+  aws s3api head-bucket --bucket "${bucket}" >/dev/null 2>&1 || return 0
+  aws s3 rm "s3://${bucket}" --recursive >/dev/null 2>&1 || true
+  aws s3api delete-bucket --bucket "${bucket}" >/dev/null 2>&1 || true
+  echo "Removed report bucket s3://${bucket}"
+}
+
+ensure_report_bucket() {
+  local bucket="$1"
+  if aws s3api head-bucket --bucket "${bucket}" >/dev/null 2>&1; then
+    return 0
+  fi
+  aws s3api create-bucket --bucket "${bucket}" >/dev/null
+  aws s3api put-public-access-block --bucket "${bucket}" \
+    --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true \
+    >/dev/null 2>&1 || true
+}
 
 send_report() {
   local report="${RECORD_DIR:-./verification}/latest_report.json"
   [[ -f "${report}" ]] || return 0
 
-  local status leftovers
+  local status bucket
   status="$(jq -r '.status' "${report}")"
-  leftovers="$(jq -r '.leftovers | to_entries[] | "- \(.key): \(.value)"' "${report}")"
-  local title="cleanup-report ${status} $(date -u +%Y%m%dT%H%M%SZ)"
-  local body
-  body="$(cat <<EOF
-Automated leftover check (counts only, no account IDs).
+  bucket="$(report_bucket_name)"
 
-Status: **${status}**
-
-${leftovers}
-
-Cost Explorer 7d is historical and may still show deleted services.
-EOF
-)"
-
-  if [[ -n "${REPORT_WEBHOOK:-}" ]]; then
-    curl -fsSL -X POST -H 'Content-Type: application/json' \
-      -d @"${report}" "${REPORT_WEBHOOK}" >/dev/null 2>&1 || true
-    echo "Report posted to REPORT_WEBHOOK"
+  if [[ "${status}" == "PASS" ]]; then
+    delete_report_bucket "${bucket}"
+    echo "VERIFY PASS; report bucket cleaned"
     return 0
   fi
 
-  if [[ -n "${REPORT_S3:-}" ]]; then
-    aws s3 cp "${report}" "${REPORT_S3}" >/dev/null 2>&1 || true
-    echo "Report uploaded to ${REPORT_S3}"
-  fi
-
-  local token="${CLEANUP_GITHUB_TOKEN:-${GH_TOKEN:-${GITHUB_TOKEN:-}}}"
-  local repo="${CLEANUP_GITHUB_REPO:-hikaru1120/aws-account-cleanup}"
-  if [[ -n "${token}" ]]; then
-    curl -fsSL -X POST \
-      -H "Authorization: Bearer ${token}" \
-      -H "Accept: application/vnd.github+json" \
-      "https://api.github.com/repos/${repo}/issues" \
-      -d "$(jq -n --arg t "${title}" --arg b "${body}" '{title:$t,body:$b,labels:["cleanup-report"]}')" \
-      >/dev/null
-    echo "Report issue created on ${repo}"
-    return 0
-  fi
-
-  echo "No CLEANUP_GITHUB_TOKEN / REPORT_WEBHOOK / REPORT_S3 set; report kept at ${report}"
+  ensure_report_bucket "${bucket}"
+  aws s3 cp "${report}" "s3://${bucket}/latest_report.json" >/dev/null
+  echo "VERIFY FAIL; report kept at s3://${bucket}/latest_report.json"
 }

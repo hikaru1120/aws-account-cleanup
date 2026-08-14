@@ -21,6 +21,10 @@ empty_bucket() {
 init_records
 log "Starting S3 module"
 aws s3api list-buckets --query 'Buckets[].Name' --output text | lines | while read -r b; do
+  if [[ "${b}" == aws-cleanup-report-* ]]; then
+    log "  skip report bucket ${b}"
+    continue
+  fi
   log "  empty+delete ${b}"
   empty_bucket "${b}"
   quiet aws s3api delete-bucket --bucket "${b}"

@@ -41,7 +41,9 @@ vpc_endpoints="$(sum_regions 'aws_r "${region}" ec2 describe-vpc-endpoints --que
 elb_v2="$(sum_regions 'aws_r "${region}" elbv2 describe-load-balancers --query "length(LoadBalancers[])" --output text')"
 elb_v1="$(sum_regions 'aws_r "${region}" elb describe-load-balancers --query "length(LoadBalancerDescriptions[])" --output text')"
 rds="$(sum_regions 'aws_r "${region}" rds describe-db-instances --query "length(DBInstances[])" --output text')"
-s3="$(n "$(aws s3api list-buckets --query "length(Buckets[])" --output text 2>/dev/null || echo 0)")"
+s3_raw="$(aws s3api list-buckets --query 'Buckets[].Name' --output text 2>/dev/null || true)"
+s3="$(echo "${s3_raw}" | tr '\t' '\n' | sed '/^$/d' | grep -vc '^aws-cleanup-report-' || true)"
+s3="$(n "${s3}")"
 cf="$(n "$(aws cloudfront list-distributions --query "length(DistributionList.Items[])" --output text 2>/dev/null || echo 0)")"
 
 explorer_ec2="unavailable"

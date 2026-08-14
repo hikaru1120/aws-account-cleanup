@@ -8,21 +8,10 @@ Partner-side cleanup for reclaiming customer AWS accounts (does not close the ac
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
-After delete, it runs an independent leftover check (all-region describe, like EC2 Global View) and writes `verification/latest_report.json`.
+After delete, leftover check runs (all-region describe). Result handling:
 
-## Feedback (no log paste)
-
-I cannot read Cloud Shell. Set one of these so the report comes back automatically:
-
-```bash
-export CLEANUP_GITHUB_TOKEN=ghp_xxx   # creates a counts-only GitHub issue
-# or
-export REPORT_WEBHOOK=https://example.com/hook
-# or
-export REPORT_S3=s3://your-bucket/cleanup-report.json
-```
-
-Then the same one-liner. Issues are counts only (no account/resource IDs).
+- **PASS**: if a previous report bucket exists, it is deleted (no leftover S3 charge)
+- **FAIL**: report is stored at `s3://aws-cleanup-report-<account-id>/latest_report.json` (private). Open that object in the console instead of pasting Cloud Shell logs. Re-run the same one-liner after fixes; PASS will remove this bucket.
 
 ## Modules (billing service)
 
@@ -32,6 +21,6 @@ Then the same one-liner. Issues are counts only (no account/resource IDs).
 | `ec2` | Instances, ASG, EBS, AMI, snapshots |
 | `vpc` | EIP, NAT, VPC endpoints |
 | `s3` `cloudfront` `kms` | storage / CDN / keys |
-| `rds` and other data/compute modules | as named |
+| `rds` and other named services | as named |
 | `route53` `iam` | DNS / identity |
 | `verify` | leftover check only |
