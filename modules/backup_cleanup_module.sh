@@ -26,13 +26,51 @@ rp_count() {
   count_text "${n}"
 }
 
+# Default aws/efs/automatic-backup-vault policy Denies DeleteRecoveryPoint AND
+# DeleteBackupVaultAccessPolicy. delete-backup-vault-access-policy therefore fails.
+# Put Allow first (PutBackupVaultAccessPolicy is not denied).
+allow_vault_deletes() {
+  local region="$1"
+  local vault="$2"
+  local account policy
+  account="$(aws sts get-caller-identity --query Account --output text)"
+  policy="$(jq -n --arg p "arn:aws:iam::${account}:root" '{
+    Version:"2012-10-17",
+    Statement:[{
+      Effect:"Allow",
+      Principal:{AWS:$p},
+      Action:[
+        "backup:DeleteBackupVault",
+        "backup:DeleteBackupVaultAccessPolicy",
+        "backup:DeleteRecoveryPoint",
+        "backup:StartCopyJob",
+        "backup:StartRestoreJob",
+        "backup:UpdateRecoveryPointLifecycle"
+      ],
+      Resource:"*"
+    }]
+  }')"
+  log "  allow deletes on vault ${vault}"
+  quiet aws_r "${region}" backup put-backup-vault-access-policy --backup-vault-name "${vault}" --policy "${policy}"
+  quiet aws_r "${region}" backup delete-backup-vault-access-policy --backup-vault-name "${vault}"
+}
+
+disable_efs_auto_backup() {
+  local region="$1"
+  local fs
+  aws_r "${region}" efs describe-file-systems --query 'FileSystems[].FileSystemId' --output text 2>/dev/null | lines | while read -r fs; do
+    log "  disable EFS automatic backup ${fs}"
+    quiet aws_r "${region}" efs put-backup-policy --file-system-id "${fs}" --backup-policy Status=DISABLED
+  done
+}
+
 empty_vault() {
   local region="$1"
   local vault="$2"
   local arn n i
 
   quiet aws_r "${region}" backup delete-backup-vault-lock-configuration --backup-vault-name "${vault}"
-  quiet aws_r "${region}" backup delete-backup-vault-access-policy --backup-vault-name "${vault}"
+  allow_vault_deletes "${region}" "${vault}"
   quiet aws_r "${region}" backup delete-backup-vault-notifications --backup-vault-name "${vault}"
 
   for i in 1 2 3 4 5 6; do
@@ -67,6 +105,7 @@ cleanup_region() {
   local region="$1"
   local id name vault n
 
+  disable_efs_auto_backup "${region}"
   stop_jobs "${region}"
 
   aws_r "${region}" backup list-legal-holds --query 'LegalHolds[?Status==`ACTIVE`].LegalHoldId' --output text 2>/dev/null | lines | while read -r id; do
