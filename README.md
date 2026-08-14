@@ -1,41 +1,28 @@
 # AWS Account Cleanup
 
-Partner-side cleanup modules for reclaiming customer AWS accounts (do not close the account).
+Partner-side cleanup for reclaiming customer AWS accounts (does not close the account).
 
-## Module design
+## Cloud Shell: one command
 
-Modules follow **console / billing surface**, not raw AWS API names.
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
+```
 
-| Module | What it covers |
+This clones the latest code and deletes common billable resources, then IAM.
+
+## What it covers
+
+| Module | Billable / reclaim scope |
 | --- | --- |
-| `iam` | IAM users and roles |
-| `ec2` | Billable items on the EC2 console: instances, ASG, ELB/ALB/NLB, EIP, EBS volumes, AMIs, snapshots, NAT gateways |
-| `route53` | Hosted zones |
+| `ec2` | instances, ASG, ELB/ALB/NLB, EIP, EBS, AMI, snapshots, NAT |
+| `billable` | RDS, ElastiCache, Redshift, DynamoDB, OpenSearch, S3, EFS, FSx, ECS, EKS, Lambda, ECR, VPC endpoints, CloudFront |
+| `route53` | hosted zones |
+| `iam` | users and roles (keeps current SSO role) |
 
-## Cloud Shell (fixed one-liner)
+Not every AWS service in existence. High-cost leftovers first; more services can be added later.
+
+## Optional: run one module
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- iam
 ```
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- ec2
-```
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- route53
-```
-
-This clones the latest `main` into `/tmp/aws-account-cleanup` and runs the module.
-
-## Local / cloned run
-
-```bash
-bash run.sh iam
-bash run.sh ec2
-bash run.sh route53
-```
-
-## Validation
-
-New modules start as `PENDING_SECONDARY_VERIFICATION` in `verification/module_validation_registry.json`.

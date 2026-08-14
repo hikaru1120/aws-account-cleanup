@@ -6,12 +6,11 @@ This folder tracks which cleanup modules are validated in real accounts.
 - `route53_cleanup_module`: `PENDING_SECONDARY_VERIFICATION`
 - `iam_cleanup_module`: `PENDING_SECONDARY_VERIFICATION`
 - `ec2_cleanup_module`: `PENDING_SECONDARY_VERIFICATION`
+- `billable_cleanup_module`: `PENDING_SECONDARY_VERIFICATION`
 
-## Run the module
+## Run
 ```bash
-bash run.sh iam
-bash run.sh ec2
-bash run.sh route53
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
 ## Runtime records

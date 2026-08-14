@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fixed Cloud Shell one-liner (after repo is public):
-#   curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- iam
-#   curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- ec2
-#   curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- route53
+# Cloud Shell one-liner (cleans all billable modules):
+# curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 
 REPO_URL="${REPO_URL:-https://github.com/hikaru1120/aws-account-cleanup.git}"
 WORKDIR="${WORKDIR:-/tmp/aws-account-cleanup}"
-MODULE="${1:-}"
-
-if [[ -z "${MODULE}" ]]; then
-  echo "Usage: bash bootstrap.sh <iam|ec2|route53>"
-  exit 1
-fi
+MODULE="${1:-all}"
 
 rm -rf "${WORKDIR}"
 git clone --depth 1 "${REPO_URL}" "${WORKDIR}"

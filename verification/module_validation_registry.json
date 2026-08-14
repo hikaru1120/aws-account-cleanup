@@ -20,10 +20,17 @@
       "last_result": null,
       "verified_by_user": false,
       "notes": "Needs real-account validation across regions for ASG, ELB, EIP, volume, AMI, snapshot, NAT."
+    },
+    "billable_cleanup_module": {
+      "status": "PENDING_SECONDARY_VERIFICATION",
+      "last_run_at": null,
+      "last_result": null,
+      "verified_by_user": false,
+      "notes": "Needs real-account validation for RDS/S3/EKS and other billed services."
     }
   },
   "progress": {
     "verified_count": 0,
-    "total_modules": 3
+    "total_modules": 4
   }
 }
