@@ -12,7 +12,7 @@ for arg in "$@"; do
   case "${arg}" in
     --report-s3) export WRITE_REPORT_S3=1 ;;
     --scan-only) export SCAN_ONLY=1 ;;
-    all|verify|scan|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|backup|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|workmail|ec2|vpc|cloudfront|s3|kms|route53)
+    all|verify|scan|iam_users|iam_roles|iam|cloudtrail|config|events|cloudwatch|backup|elb|eks|ecs|lambda|rds|elasticache|redshift|dynamodb|opensearch|efs|fsx|ecr|workmail|ec2|vpc|cloudfront|waf|s3|kms|route53)
       MODULE="${arg}"
       ;;
     "")
@@ -47,7 +47,7 @@ require_aws_creds() {
 require_aws_creds
 
 # 1 freeze IAM users  2 stop log/event producers  3 compute  4 data  5 network
-# 6 CloudFront  7 S3  8 KMS  9 Route53  10 IAM roles
+# 6 CloudFront  7 WAF  8 S3  9 KMS  10 Route53  11 IAM roles
 ALL_MODULES=(
   iam_users
   cloudtrail
@@ -71,6 +71,7 @@ ALL_MODULES=(
   ec2
   vpc
   cloudfront
+  waf
   s3
   kms
   route53

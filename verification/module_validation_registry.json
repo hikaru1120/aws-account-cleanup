@@ -5,6 +5,7 @@
     "vpc_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "s3_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "cloudfront_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
+    "waf_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "kms_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "rds_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
     "elasticache_cleanup_module": { "status": "PENDING_SECONDARY_VERIFICATION", "verified_by_user": false },
@@ -28,6 +29,6 @@
   },
   "progress": {
     "verified_count": 0,
-    "total_modules": 25
+    "total_modules": 26
   }
 }

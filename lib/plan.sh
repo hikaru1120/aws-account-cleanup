@@ -58,6 +58,7 @@ scan_one_region() {
   plan_add "${out}" "rds.clusters.${region}" "$(aws_r "${region}" rds describe-db-clusters --query 'DBClusters[].DBClusterIdentifier' --output text 2>/dev/null || true)"
   plan_add "${out}" "eks.${region}" "$(aws_r "${region}" eks list-clusters --query 'clusters[]' --output text 2>/dev/null || true)"
   plan_add "${out}" "lambda.${region}" "$(aws_r "${region}" lambda list-functions --query 'Functions[].FunctionName' --output text 2>/dev/null || true)"
+  plan_add "${out}" "waf.regional.${region}" "$(aws_r "${region}" wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[].Name' --output text 2>/dev/null || true)"
 }
 
 scan_global() {
@@ -72,6 +73,7 @@ scan_global() {
   emit "iam.users" "$(aws iam list-users --query 'Users[].UserName' --output text 2>/dev/null || true)"
   emit "s3.buckets" "$(aws s3api list-buckets --query 'Buckets[].Name' --output text 2>/dev/null | tr '\t' '\n' | grep -v '^aws-cleanup-report-' || true)"
   emit "cloudfront.distributions" "$(aws cloudfront list-distributions --query 'DistributionList.Items[].Id' --output text 2>/dev/null || true)"
+  emit "waf.cloudfront" "$(aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query 'WebACLs[].Name' --output text 2>/dev/null || true)"
   emit "route53.zones" "$(aws route53 list-hosted-zones --query 'HostedZones[].Name' --output text 2>/dev/null || true)"
 
   echo "scanning regions (parallel)..."

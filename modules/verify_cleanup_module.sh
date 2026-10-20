@@ -44,6 +44,11 @@ s3_raw="$(aws s3api list-buckets --query 'Buckets[].Name' --output text 2>/dev/n
 s3="$(echo "${s3_raw}" | tr '\t' '\n' | sed '/^$/d' | grep -vc '^aws-cleanup-report-' || true)"
 s3="$(n "${s3}")"
 cf="$(n "$(aws cloudfront list-distributions --query "length(DistributionList.Items[])" --output text 2>/dev/null || echo 0)")"
+waf_cf="$(n "$(aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query 'length(WebACLs[])' --output text 2>/dev/null || echo 0)")"
+waf_reg="$(sum_regions 'aws_r "${region}" wafv2 list-web-acls --scope REGIONAL --query "length(WebACLs[])" --output text')"
+waf_classic="$(n "$(aws waf list-web-acls --region us-east-1 --query 'length(WebACLs[])' --output text 2>/dev/null || echo 0)")"
+waf_classic_reg="$(sum_regions 'aws_r "${region}" waf-regional list-web-acls --query "length(WebACLs[])" --output text')"
+waf=$((waf_cf + waf_reg + waf_classic + waf_classic_reg))
 
 backup_vaults=0
 backup_rps=0
@@ -86,10 +91,11 @@ leftovers="$(jq -n \
   --argjson rds "${rds}" \
   --argjson s3 "${s3}" \
   --argjson cloudfront "${cf}" \
+  --argjson waf "${waf}" \
   --argjson backup_vaults "${backup_vaults}" \
   --argjson backup_recovery_points "${backup_rps}" \
   --argjson workmail_orgs "${workmail_orgs}" \
-  '{ec2_instances:$ec2_instances,ec2_volumes:$ec2_volumes,ec2_snapshots:$ec2_snapshots,ec2_amis:$ec2_amis,vpc_eips:$vpc_eips,vpc_nats:$vpc_nats,vpc_endpoints:$vpc_endpoints,elb:$elb,rds:$rds,s3:$s3,cloudfront:$cloudfront,backup_vaults:$backup_vaults,backup_recovery_points:$backup_recovery_points,workmail_orgs:$workmail_orgs}')"
+  '{ec2_instances:$ec2_instances,ec2_volumes:$ec2_volumes,ec2_snapshots:$ec2_snapshots,ec2_amis:$ec2_amis,vpc_eips:$vpc_eips,vpc_nats:$vpc_nats,vpc_endpoints:$vpc_endpoints,elb:$elb,rds:$rds,s3:$s3,cloudfront:$cloudfront,waf:$waf,backup_vaults:$backup_vaults,backup_recovery_points:$backup_recovery_points,workmail_orgs:$workmail_orgs}')"
 
 nonzero="$(echo "${leftovers}" | jq '[.[] | select(. > 0)] | length')"
 status="PASS"

@@ -18,6 +18,14 @@ curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main
 
 Free flat-rate plans switch to pay-as-you-go and are deleted in that run. Pro, Business, and Premium are disabled in that run and deleted as soon as AWS accepts the delete. The paid plan fee continues through the current billing period and stops after the time printed in the log.
 
+WAF only:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- waf
+```
+
+Web ACLs created by CloudFront are detached and deleted with the others. A distribution still on a paid flat-rate plan keeps its web ACL until that plan ends.
+
 Scan only (no delete):
 
 ```bash
@@ -46,7 +54,7 @@ PASS: that report bucket is deleted so it does not keep billing.
 3. AWS Backup (plans, recovery points, vaults)  
 4. ELB, EKS, ECS, Lambda, databases, file systems, ECR, WorkMail  
 5. EC2 then VPC — instances before EIP/NAT  
-6. CloudFront then S3  
+6. CloudFront, then WAF, then S3  
 7. KMS (schedule deletion after data is gone)  
 8. Route53  
 9. IAM **roles** last — after compute that used those roles  
