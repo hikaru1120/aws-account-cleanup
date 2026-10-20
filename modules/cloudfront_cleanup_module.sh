@@ -434,21 +434,36 @@ if ! delete_tenants; then
 fi
 
 dists="$(aws cloudfront list-distributions --output json 2>/dev/null || echo '{}')"
+marker="$(jq -r '.DistributionList.NextMarker // empty' <<<"${dists}")"
+while [[ -n "${marker}" && "${marker}" != "null" ]]; do
+  page="$(aws cloudfront list-distributions --marker "${marker}" --output json 2>/dev/null || echo '{}')"
+  dists="$(jq -c --argjson page "${page}" '.DistributionList.Items += ($page.DistributionList.Items // [])' <<<"${dists}")"
+  marker="$(jq -r '.DistributionList.NextMarker // empty' <<<"${page}")"
+done
 primary_ids="$(jq -r '.DistributionList.Items[]? | select(.Staging!=true) | .Id' <<<"${dists}")"
 staging_ids="$(jq -r '.DistributionList.Items[]? | select(.Staging==true) | .Id' <<<"${dists}")"
+listed="$(jq -r '[.DistributionList.Items[]?] | length' <<<"${dists}")"
 batch=""
+processing=0
+skipped_plan=0
+skipped_tenant=0
 
 while read -r id; do
   [[ -z "${id}" ]] && continue
   if plan_blocks "${id}"; then
+    skipped_plan=$((skipped_plan + 1))
     continue
   fi
   if [[ "${blocked_parents}" == *" ${id} "* ]]; then
+    skipped_tenant=$((skipped_tenant + 1))
     log "  skip ${id}: tenants remain"
     continue
   fi
+  processing=$((processing + 1))
   batch+="${id}"$'\n'
 done <<<"${primary_ids}"
+staging_n="$(printf '%s\n' "${staging_ids}" | sed '/^$/d' | wc -l | tr -d ' ')"
+log "listed ${listed} distributions: processing ${processing} now, ${staging_n} staging after that, skipped ${skipped_plan} on a paid plan until ${when}, skipped ${skipped_tenant} because tenants remain"
 drain_distributions "${batch}"
 
 delete_policies
