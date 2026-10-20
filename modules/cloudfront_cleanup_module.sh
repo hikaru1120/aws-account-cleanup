@@ -527,11 +527,7 @@ fi
 
 paid="$(jq -r '[.[] | select(.planTier != "FREE" and .planTier != null)] | length' <<<"${subs}")"
 when="$(jq -r '[.[] | .scheduledChange.effectiveDate // empty] | unique | .[0] // "end of the billing period"' <<<"${subs}")"
-if [[ "${paid}" != "0" ]]; then
-  log "  ${paid} paid plans stay billed until ${when}. Cancellation is scheduled, so the next billing period has no plan fee. Disabling and deleting those distributions now."
-fi
 other="$(jq -r '[.[] | (.resourceArns // [])[] | select(test("distribution/")|not)] | length' <<<"${subs}")"
-[[ "${other}" != "0" ]] && log "  ${other} bundled WAF or other plan resources left in place"
 plan_held=0
 plan_held_err=""
 
@@ -570,6 +566,19 @@ while read -r id; do
   batch+="${id}"$'\n'
 done <<<"${primary_ids}"
 staging_n="$(printf '%s\n' "${staging_ids}" | sed '/^$/d' | wc -l | tr -d ' ')"
+attached="$(jq -r --argjson ids "$(jq -c '[.DistributionList.Items[]?.Id // empty]' <<<"${dists}")" '
+  [ .[]
+    | select(.planTier != "FREE" and .planTier != null)
+    | (.resourceArns // [])[]
+    | select(test("distribution/"))
+    | split("/")[-1]
+    | select(. as $id | $ids | index($id) != null)
+  ] | unique | length
+' <<<"${subs}" 2>/dev/null || echo 0)"
+if [[ "${paid}" != "0" ]]; then
+  log "  ${paid} paid plans stay billed until ${when}. ${attached} of them still have a distribution. Cancellation is scheduled, so the next billing period has no plan fee."
+fi
+[[ "${other}" != "0" ]] && log "  ${other} bundled WAF or other plan resources left in place"
 log "listed ${listed} distributions: disabling ${processing} now, ${staging_n} staging after that, skipped ${skipped_tenant} because tenants remain"
 drain_distributions "${batch}"
 
