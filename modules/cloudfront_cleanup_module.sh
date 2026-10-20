@@ -141,53 +141,86 @@ wait_plans_settled() {
   done
 }
 
-wait_distribution() {
-  local id="$1" want_disabled="${2:-0}"
-  local start now elapsed status enabled
-  start="$(date +%s)"
-  while true; do
-    now="$(date +%s)"
-    elapsed=$((now - start))
-    if [[ "${elapsed}" -ge "${CF_WAIT_SECONDS}" ]]; then
-      log "    ${id} still not ready after ${elapsed}s"
-      return 1
-    fi
-    status="$(aws cloudfront get-distribution --id "${id}" --query 'Distribution.Status' --output text 2>/dev/null || echo unknown)"
-    enabled="$(aws cloudfront get-distribution --id "${id}" --query 'Distribution.DistributionConfig.Enabled' --output text 2>/dev/null || echo unknown)"
-    log "    ${id} Status=${status} Enabled=${enabled} (${elapsed}s)"
-    if [[ "${status}" == "Deployed" ]]; then
-      if [[ "${want_disabled}" == "0" || "${enabled}" == "False" || "${enabled}" == "false" ]]; then
-        return 0
-      fi
-    fi
-    sleep 15
-  done
+dist_snapshot() {
+  aws cloudfront get-distribution --id "$1" \
+    --query 'Distribution.[Status,DistributionConfig.Enabled,DistributionConfig.ContinuousDeploymentPolicyId]' \
+    --output text 2>/dev/null || echo -e "unknown\tunknown\tNone"
 }
 
-disable_distribution() {
-  local id="$1" cfg etag enabled policy attempt
-  for attempt in 1 2 3; do
-    wait_distribution "${id}" 0 || return 1
-    cfg="$(aws cloudfront get-distribution-config --id "${id}" --output json 2>/tmp/cf-dist.err)" || {
-      fail "$(cat /tmp/cf-dist.err)" get-distribution-config "${id}" || true
-      return 1
-    }
-    etag="$(jq -r '.ETag' <<<"${cfg}")"
-    enabled="$(jq -r '.DistributionConfig.Enabled' <<<"${cfg}")"
-    policy="$(jq -r '.DistributionConfig.ContinuousDeploymentPolicyId // empty' <<<"${cfg}")"
-    if [[ "${enabled}" == "false" && -z "${policy}" ]]; then
+ready_to_delete() {
+  local status="$1" enabled="$2" policy="$3"
+  [[ "${status}" == "Deployed" && ( "${enabled}" == "False" || "${enabled}" == "false" ) && ( -z "${policy}" || "${policy}" == "None" ) ]]
+}
+
+# 0 = ready to delete, 2 = update sent or still deploying, 1 = update failed.
+submit_disable() {
+  local id="$1" status="" enabled="" policy="" cfg etag
+  IFS=$'\t' read -r status enabled policy < <(dist_snapshot "${id}")
+  if ready_to_delete "${status}" "${enabled}" "${policy}"; then
+    return 0
+  fi
+  if [[ "${status}" != "Deployed" ]]; then
+    return 2
+  fi
+  cfg="$(aws cloudfront get-distribution-config --id "${id}" --output json 2>/tmp/cf-dist.err)" || {
+    fail "$(cat /tmp/cf-dist.err 2>/dev/null || true)" get-distribution-config "${id}" || true
+    return 1
+  }
+  etag="$(jq -r '.ETag' <<<"${cfg}")"
+  log "  disable ${id}"
+  jq '.DistributionConfig | .Enabled=false | del(.ContinuousDeploymentPolicyId)' <<<"${cfg}" >"/tmp/cf-${id}.json"
+  try aws cloudfront update-distribution --id "${id}" --if-match "${etag}" --distribution-config "file:///tmp/cf-${id}.json" || return 1
+  return 2
+}
+
+# Disable every id first. While one distribution is still deploying, delete any other that is already Deployed.
+drain_distributions() {
+  local pending="$1" wave="" next="" id status enabled policy rc start elapsed
+  while read -r id; do
+    [[ -z "${id}" ]] && continue
+    rc=0
+    submit_disable "${id}" || rc=$?
+    if [[ "${rc}" -eq 0 ]]; then
+      delete_distribution "${id}" || true
+    elif [[ "${rc}" -eq 1 ]]; then
+      log "  skip ${id}: disable failed"
+    else
+      wave+="${id} "
+    fi
+  done <<<"${pending}"
+
+  start="$(date +%s)"
+  while [[ -n "${wave// /}" ]]; do
+    elapsed=$(( $(date +%s) - start ))
+    if [[ "${elapsed}" -ge "${CF_WAIT_SECONDS}" ]]; then
+      log "  still deploying after ${elapsed}s: ${wave}"
       return 0
     fi
-    log "  disable ${id}"
-    jq '.DistributionConfig | .Enabled=false | del(.ContinuousDeploymentPolicyId)' <<<"${cfg}" >"/tmp/cf-${id}.json"
-    if try aws cloudfront update-distribution --id "${id}" --if-match "${etag}" --distribution-config "file:///tmp/cf-${id}.json"; then
-      wait_distribution "${id}" 1 || return 1
-      return 0
-    fi
-    log "    update ${id} retry ${attempt}"
-    sleep 20
+    log "  ${wave} still deploying (${elapsed}s); checking the others"
+    next=""
+    while read -r id; do
+      [[ -z "${id}" ]] && continue
+      IFS=$'\t' read -r status enabled policy < <(dist_snapshot "${id}")
+      if ready_to_delete "${status}" "${enabled}" "${policy}"; then
+        delete_distribution "${id}" || next+="${id} "
+      elif [[ "${status}" == "Deployed" ]]; then
+        rc=0
+        submit_disable "${id}" || rc=$?
+        if [[ "${rc}" -eq 0 ]]; then
+          delete_distribution "${id}" || true
+        elif [[ "${rc}" -eq 1 ]]; then
+          log "  skip ${id}: disable failed"
+        else
+          next+="${id} "
+        fi
+      else
+        next+="${id} "
+      fi
+    done <<<"${wave}"
+    wave="${next}"
+    [[ -z "${wave// /}" ]] && break
+    sleep 15
   done
-  return 1
 }
 
 delete_distribution() {
@@ -403,43 +436,30 @@ fi
 dists="$(aws cloudfront list-distributions --output json 2>/dev/null || echo '{}')"
 primary_ids="$(jq -r '.DistributionList.Items[]? | select(.Staging!=true) | .Id' <<<"${dists}")"
 staging_ids="$(jq -r '.DistributionList.Items[]? | select(.Staging==true) | .Id' <<<"${dists}")"
-ready=" "
+batch=""
 
 while read -r id; do
   [[ -z "${id}" ]] && continue
   if plan_blocks "${id}"; then
-    log "  skip ${id}: still on a flat-rate plan"
     continue
   fi
   if [[ "${blocked_parents}" == *" ${id} "* ]]; then
     log "  skip ${id}: tenants remain"
     continue
   fi
-  if disable_distribution "${id}"; then
-    ready+="${id} "
-  else
-    log "  skip delete ${id}: disable did not finish"
-  fi
+  batch+="${id}"$'\n'
 done <<<"${primary_ids}"
+drain_distributions "${batch}"
 
 delete_policies
 
+batch=""
 while read -r id; do
   [[ -z "${id}" ]] && continue
-  if plan_blocks "${id}"; then
-    continue
-  fi
-  if disable_distribution "${id}"; then
-    delete_distribution "${id}" || true
-  fi
+  plan_blocks "${id}" && continue
+  batch+="${id}"$'\n'
 done <<<"${staging_ids}"
-
-while read -r id; do
-  [[ -z "${id}" ]] && continue
-  if [[ "${ready}" == *" ${id} "* ]]; then
-    delete_distribution "${id}" || true
-  fi
-done <<<"${primary_ids}"
+drain_distributions "${batch}"
 
 cleanup_after_distributions
 update_registry "SUCCESS"
