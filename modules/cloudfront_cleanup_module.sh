@@ -16,9 +16,46 @@ export AWS_PAGER=""
 fail() {
   local out="$1"
   shift
+  out="$(printf '%s' "${out}" | tr '\n' ' ')"
   mkdir -p "$(dirname "${ERR_FILE}")"
   printf '%s\n' "[${MODULE_NAME}] $* | ${out}" >> "${ERR_FILE}"
   log "    FAIL ${out}"
+  return 1
+}
+
+# One Pricing Plan Manager call. Stdout is the JSON body only, so callers can capture it.
+# Return 2 when the service throttles. CLI retries are disabled so they do not burn the quota.
+ppm_once() {
+  local out
+  if out="$(AWS_MAX_ATTEMPTS=1 AWS_RETRY_MODE=standard aws pricing-plan-manager --region us-east-1 "$@" 2>&1)"; then
+    printf '%s\n' "${out}"
+    return 0
+  fi
+  printf '%s\n' "${out}" > /tmp/cf-ppm.err
+  if [[ "${out}" == *TooManyRequests* || "${out}" == *Throttl* || "${out}" == *RequestLimitExceeded* ]]; then
+    return 2
+  fi
+  return 1
+}
+
+ppm_retry() {
+  local attempt=0 wait_s=8 rc
+  while (( attempt < 8 )); do
+    if ppm_once "$@"; then
+      return 0
+    fi
+    rc=$?
+    if [[ "${rc}" -ne 2 ]]; then
+      return 1
+    fi
+    printf '%s\n' "[$(date '+%F %T')] [${MODULE_NAME}] throttled, retry in ${wait_s}s" >&2
+    sleep "${wait_s}"
+    if [[ "${wait_s}" -lt 60 ]]; then
+      wait_s=$((wait_s * 2))
+    fi
+    attempt=$((attempt + 1))
+  done
+  echo "still throttled" > /tmp/cf-ppm.err
   return 1
 }
 
@@ -34,9 +71,9 @@ list_cf_subs() {
   local token="" page acc='[]'
   while :; do
     if [[ -n "${token}" ]]; then
-      page="$(aws pricing-plan-manager list-subscriptions --region us-east-1 --next-token "${token}" --output json 2>/tmp/cf-ppm.err)" || return 1
+      page="$(ppm_retry list-subscriptions --next-token "${token}" --output json)" || return 1
     else
-      page="$(aws pricing-plan-manager list-subscriptions --region us-east-1 --output json 2>/tmp/cf-ppm.err)" || return 1
+      page="$(ppm_retry list-subscriptions --output json)" || return 1
     fi
     acc="$(jq -c --argjson page "${page}" '. + [($page.subscriptionSummaries // [])[] | select(.planFamily=="CloudFront")]' <<<"${acc}")" || return 1
     token="$(jq -r '.nextToken // empty' <<<"${page}")"
@@ -46,7 +83,7 @@ list_cf_subs() {
 }
 
 cancel_plans() {
-  local subs="$1" sub arn etag tier status change
+  local subs="$1" sub arn etag tier status change err
   printf '%s\n' "${subs}" | jq -c '.[]' | while read -r sub; do
     [[ -z "${sub}" ]] && continue
     arn="$(jq -r '.arn' <<<"${sub}")"
@@ -61,7 +98,8 @@ cancel_plans() {
     fi
     if [[ "${change}" == "DOWNGRADE" ]]; then
       log "  undo pending downgrade tier=${tier} ${arn}"
-      try aws pricing-plan-manager cancel-subscription-change --region us-east-1 --arn "${arn}" --if-match "${etag}" || true
+      ppm_retry cancel-subscription-change --arn "${arn}" --if-match "${etag}" >/dev/null || fail "$(cat /tmp/cf-ppm.err 2>/dev/null || true)" cancel-subscription-change "${arn}" || true
+      sleep 5
       continue
     fi
     if [[ "${status}" == "SYNC_IN_PROGRESS" ]]; then
@@ -69,7 +107,20 @@ cancel_plans() {
       continue
     fi
     log "  cancel plan tier=${tier} status=${status} ${arn}"
-    try aws pricing-plan-manager cancel-subscription --region us-east-1 --arn "${arn}" --if-match "${etag}" || true
+    if ! ppm_retry cancel-subscription --arn "${arn}" --if-match "${etag}" >/dev/null; then
+      err="$(cat /tmp/cf-ppm.err 2>/dev/null || true)"
+      if [[ "${err}" == *Conflict* || "${err}" == *Precondition* ]]; then
+        etag="$(ppm_retry get-subscription --arn "${arn}" --output json | jq -r '.eTag // .subscription.eTag // .ETag // empty' || true)"
+        if [[ -n "${etag}" ]] && ppm_retry cancel-subscription --arn "${arn}" --if-match "${etag}" >/dev/null; then
+          :
+        else
+          fail "$(cat /tmp/cf-ppm.err 2>/dev/null || true)" cancel-subscription "${arn}" || true
+        fi
+      else
+        fail "${err}" cancel-subscription "${arn}" || true
+      fi
+    fi
+    sleep 5
   done || true
 }
 
