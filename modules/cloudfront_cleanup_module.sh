@@ -6,7 +6,8 @@ source "${ROOT}/lib/common.sh"
 
 # Bill: Amazon CloudFront
 # Pay-as-you-go is not a distribution field. Cancel the flat-rate subscription first.
-# Free plans end immediately; Pro/Business/Premium stay until the billing period ends.
+# Free plans end immediately. Paid plans stay billed until the period ends, but disable
+# and attempt delete in this run. AWS may reject delete while the subscription is active.
 # Then delete tenants, detach continuous deployment, disable, wait Deployed, delete.
 # Skip WAF, Route53, and KeyValueStore that were bundled on the plan.
 
@@ -175,13 +176,17 @@ submit_disable() {
 
 # Disable every id first. While one distribution is still deploying, delete any other that is already Deployed.
 drain_distributions() {
-  local pending="$1" wave="" next="" id status enabled policy rc start elapsed
+  local pending="$1" wave="" next="" id status enabled policy rc drc start elapsed
   while read -r id; do
     [[ -z "${id}" ]] && continue
     rc=0
     submit_disable "${id}" || rc=$?
     if [[ "${rc}" -eq 0 ]]; then
-      delete_distribution "${id}" || true
+      drc=0
+      delete_distribution "${id}" || drc=$?
+      if [[ "${drc}" -ne 0 && "${drc}" -ne 3 ]]; then
+        wave+="${id} "
+      fi
     elif [[ "${rc}" -eq 1 ]]; then
       log "  skip ${id}: disable failed"
     else
@@ -202,12 +207,20 @@ drain_distributions() {
       IFS=$'\t' read -r status enabled policy < <(dist_snapshot "${id}")
       log "    ${id} Status=${status} Enabled=${enabled} (${elapsed}s)"
       if ready_to_delete "${status}" "${enabled}" "${policy}"; then
-        delete_distribution "${id}" || next+="${id} "
+        drc=0
+        delete_distribution "${id}" || drc=$?
+        if [[ "${drc}" -ne 0 && "${drc}" -ne 3 ]]; then
+          next+="${id} "
+        fi
       elif [[ "${status}" == "Deployed" ]]; then
         rc=0
         submit_disable "${id}" || rc=$?
         if [[ "${rc}" -eq 0 ]]; then
-          delete_distribution "${id}" || true
+          drc=0
+          delete_distribution "${id}" || drc=$?
+          if [[ "${drc}" -ne 0 && "${drc}" -ne 3 ]]; then
+            next+="${id} "
+          fi
         elif [[ "${rc}" -eq 1 ]]; then
           log "  skip ${id}: disable failed"
         else
@@ -224,11 +237,20 @@ drain_distributions() {
 }
 
 delete_distribution() {
-  local id="$1" etag
+  local id="$1" etag out
   etag="$(aws cloudfront get-distribution-config --id "${id}" --query 'ETag' --output text 2>/dev/null || true)"
   [[ -z "${etag}" || "${etag}" == "None" ]] && return 1
   log "  delete ${id}"
-  try aws cloudfront delete-distribution --id "${id}" --if-match "${etag}"
+  if out="$(aws cloudfront delete-distribution --id "${id}" --if-match "${etag}" 2>&1)"; then
+    return 0
+  fi
+  if [[ "${out}" == *[Pp]ricing*[Pp]lan* || "${out}" == *ubscribed* ]]; then
+    plan_held=$((plan_held + 1))
+    [[ -z "${plan_held_err}" ]] && plan_held_err="$(printf '%s' "${out}" | tr '\n' ' ')"
+    return 3
+  fi
+  fail "${out}" delete-distribution "${id}"
+  return 1
 }
 
 delete_tenants() {
@@ -295,7 +317,7 @@ delete_tenants() {
     tetag="$(jq -r '.ETag' <<<"${traw}")"
     log "  delete tenant ${tid}"
     try aws cloudfront delete-distribution-tenant --id "${tid}" --if-match "${tetag}" || blocked_parents+="${parent} "
-  done < <(jq -r '.[]?.Id' <<<"${items}")
+  done < <(jq -r '.[] | objects | .Id // empty | select(. != "")' <<<"${items}" 2>/dev/null || true)
 }
 
 delete_policies() {
@@ -439,22 +461,15 @@ if ! wait_plans_settled; then
   exit 0
 fi
 
-locked=" "
-while read -r dist_id; do
-  [[ -z "${dist_id}" ]] && continue
-  locked+="${dist_id} "
-done < <(jq -r '.[] | (.resourceArns // [])[] | select(test("distribution/")) | split("/")[-1]' <<<"${subs}")
 paid="$(jq -r '[.[] | select(.planTier != "FREE" and .planTier != null)] | length' <<<"${subs}")"
 when="$(jq -r '[.[] | .scheduledChange.effectiveDate // empty] | unique | .[0] // "end of the billing period"' <<<"${subs}")"
 if [[ "${paid}" != "0" ]]; then
-  log "  ${paid} paid plans stay active until ${when}. Cancellation is scheduled; AWS still reports planTier as PRO and rejects delete before that time."
+  log "  ${paid} paid plans stay billed until ${when}. Cancellation is scheduled, so the next billing period has no plan fee. Disabling and deleting those distributions now."
 fi
 other="$(jq -r '[.[] | (.resourceArns // [])[] | select(test("distribution/")|not)] | length' <<<"${subs}")"
 [[ "${other}" != "0" ]] && log "  ${other} bundled WAF or other plan resources left in place"
-
-plan_blocks() {
-  [[ "${locked}" == *" $1 "* || "${subs}" == *"distribution/${1}\""* ]]
-}
+plan_held=0
+plan_held_err=""
 
 if ! delete_tenants; then
   if grep -Eqi 'invalid choice|unknown operation' /tmp/cf-tenant.err 2>/dev/null; then
@@ -478,15 +493,10 @@ staging_ids="$(jq -r '.DistributionList.Items[]? | select(.Staging==true) | .Id'
 listed="$(jq -r '[.DistributionList.Items[]?] | length' <<<"${dists}")"
 batch=""
 processing=0
-skipped_plan=0
 skipped_tenant=0
 
 while read -r id; do
   [[ -z "${id}" ]] && continue
-  if plan_blocks "${id}"; then
-    skipped_plan=$((skipped_plan + 1))
-    continue
-  fi
   if [[ "${blocked_parents}" == *" ${id} "* ]]; then
     skipped_tenant=$((skipped_tenant + 1))
     log "  skip ${id}: tenants remain"
@@ -496,7 +506,7 @@ while read -r id; do
   batch+="${id}"$'\n'
 done <<<"${primary_ids}"
 staging_n="$(printf '%s\n' "${staging_ids}" | sed '/^$/d' | wc -l | tr -d ' ')"
-log "listed ${listed} distributions: processing ${processing} now, ${staging_n} staging after that, skipped ${skipped_plan} on a paid plan until ${when}, skipped ${skipped_tenant} because tenants remain"
+log "listed ${listed} distributions: disabling ${processing} now, ${staging_n} staging after that, skipped ${skipped_tenant} because tenants remain"
 drain_distributions "${batch}"
 
 delete_policies
@@ -504,10 +514,14 @@ delete_policies
 batch=""
 while read -r id; do
   [[ -z "${id}" ]] && continue
-  plan_blocks "${id}" && continue
   batch+="${id}"$'\n'
 done <<<"${staging_ids}"
 drain_distributions "${batch}"
+
+if [[ "${plan_held}" != "0" ]]; then
+  log "  ${plan_held} distributions are disabled. AWS rejected delete: ${plan_held_err}"
+  log "  the plan fee stops at ${when}. Run the same command again after that time to delete them."
+fi
 
 cleanup_after_distributions
 update_registry "SUCCESS"

@@ -16,7 +16,7 @@ CloudFront only:
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- cloudfront
 ```
 
-Free flat-rate plans switch to pay-as-you-go and are deleted in that run. Pro, Business, and Premium stay until the billing period ends; run the same command again after the time printed in the log.
+Free flat-rate plans switch to pay-as-you-go and are deleted in that run. Pro, Business, and Premium are disabled in that run and deleted as soon as AWS accepts the delete. The paid plan fee continues through the current billing period and stops after the time printed in the log.
 
 Scan only (no delete):
 
