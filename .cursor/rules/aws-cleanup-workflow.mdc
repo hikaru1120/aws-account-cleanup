@@ -17,4 +17,7 @@ alwaysApply: true
 - IAM users and roles are split: users at start, roles at end. Skip only the current caller identity and service-linked roles.
 - Route53: keep only apex NS/SOA; disable DNSSEC and Accelerated Recovery; poll then delete.
 - RDS/Redshift/DynamoDB: disable deletion protection, delete the database, then delete snapshots.
-- S3: log bucket i/total, batch size, elapsed time, 15s heartbeat. Recommend tmux in Cloud Shell.
+- S3: log bucket i/total, batch size, elapsed time, 15s heartbeat. Do not recommend tmux.
+- AWS Backup: EFS automatic vault Denies DeleteRecoveryPoint and DeleteBackupVaultAccessPolicy. Put Allow policy first, then delete recovery points. Do not disassociate. Skip undeletable aws/efs/automatic-backup-vault after empty.
+- WorkMail: deregister users/groups/resources, then force-delete organization (do not delete Directory Service).
+- CloudFront: cancel the flat-rate plan (that switches it to pay-as-you-go) before disable. Free plans cancel immediately. Pro/Business/Premium take effect at the end of the billing period; skip those distributions until a later run. Delete tenants first, detach continuous deployment, disable, wait until Deployed, then delete. Leave bundled WAF, Route53, and KeyValueStore in place.

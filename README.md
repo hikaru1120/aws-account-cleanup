@@ -10,6 +10,14 @@ Normal run (no S3 report):
 curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash
 ```
 
+CloudFront only:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikaru1120/aws-account-cleanup/main/bootstrap.sh | bash -s -- cloudfront
+```
+
+Free flat-rate plans switch to pay-as-you-go and are deleted in that run. Pro, Business, and Premium stay until the billing period ends; run the same command again after the time printed in the log.
+
 Scan only (no delete):
 
 ```bash
