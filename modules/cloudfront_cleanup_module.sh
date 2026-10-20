@@ -256,7 +256,7 @@ delete_tenants() {
   done
   while read -r tid; do
     [[ -z "${tid}" ]] && continue
-    parent="$(jq -r --arg id "${tid}" '.[] | select(.Id==$id) | .DistributionId // empty' <<<"${items}")"
+    parent="$(jq -r --arg id "${tid}" '.[] | objects | select(.Id==$id) | .DistributionId // empty' <<<"${items}" 2>/dev/null || true)"
     traw="$(aws cloudfront get-distribution-tenant --id "${tid}" --output json 2>/tmp/cf-tenant.err)" || \
       traw="$(aws cloudfront get-distribution-tenant --identifier "${tid}" --output json 2>/tmp/cf-tenant.err)" || {
         log "  tenant ${tid} unreadable, keep parent ${parent}"
@@ -310,7 +310,16 @@ delete_policies() {
     [[ -z "${petag}" || "${petag}" == "None" ]] && continue
     log "  delete continuous deployment policy ${pid}"
     try aws cloudfront delete-continuous-deployment-policy --id "${pid}" --if-match "${petag}" || true
-  done < <(jq -r '[.ContinuousDeploymentPolicyList.Items[]?.ContinuousDeploymentPolicy.Id, .ContinuousDeploymentPolicyList.Items[]?.Id] | .[] | select(. != null)' <<<"${policies}")
+  done < <(jq -r '
+    def rows:
+      if type == "array" then .
+      elif type == "object" and (.Items | type) == "array" then .Items
+      else [] end;
+    def rid:
+      if type == "object" then (.ContinuousDeploymentPolicy.Id // .Id // empty)
+      else empty end;
+    (.ContinuousDeploymentPolicyList // []) | rows | .[] | rid | select(. != "")
+  ' <<<"${policies}" 2>/dev/null || true)
 }
 
 cleanup_after_distributions() {
@@ -333,7 +342,13 @@ cleanup_after_distributions() {
       [[ -z "${getag}" || "${getag}" == "null" ]] && continue
       log "  delete connection group ${gid}"
       try aws cloudfront delete-connection-group --id "${gid}" --if-match "${getag}" || true
-    done < <(jq -r '[.ConnectionGroups[]?.Id, .ConnectionGroupList.Items[]?.Id] | .[] | select(. != null)' <<<"${groups}")
+    done < <(jq -r '
+      def rows:
+        if type == "array" then .
+        elif type == "object" and (.Items | type) == "array" then .Items
+        else [] end;
+      (.ConnectionGroups // .ConnectionGroupList // []) | rows | .[]? | objects | .Id // empty | select(. != "")
+    ' <<<"${groups}" 2>/dev/null || true)
   fi
 
   if anycast="$(aws cloudfront list-anycast-ip-lists --output json 2>/tmp/cf-ip.err)"; then
@@ -343,7 +358,13 @@ cleanup_after_distributions() {
       [[ -z "${aetag}" || "${aetag}" == "None" ]] && continue
       log "  delete anycast ip list ${aid}"
       try aws cloudfront delete-anycast-ip-list --id "${aid}" --if-match "${aetag}" || true
-    done < <(jq -r '[.AnycastIpLists.Items[]?.Id, .AnycastIpListList.Items[]?.Id, .AnycastIpLists[]?.Id] | .[] | select(. != null)' <<<"${anycast}")
+    done < <(jq -r '
+      def rows:
+        if type == "array" then .
+        elif type == "object" and (.Items | type) == "array" then .Items
+        else [] end;
+      (.AnycastIpLists // .AnycastIpListList // []) | rows | .[]? | objects | .Id // empty | select(. != "")
+    ' <<<"${anycast}" 2>/dev/null || true)
   fi
 
   if vpcs="$(aws cloudfront list-vpc-origins --output json 2>/tmp/cf-vpc.err)"; then
@@ -353,7 +374,13 @@ cleanup_after_distributions() {
       [[ -z "${vetag}" || "${vetag}" == "None" ]] && continue
       log "  delete vpc origin ${vid}"
       try aws cloudfront delete-vpc-origin --id "${vid}" --if-match "${vetag}" || true
-    done < <(jq -r '[.VpcOriginList.Items[]?.Id, .VpcOrigins.Items[]?.Id] | .[] | select(. != null)' <<<"${vpcs}")
+    done < <(jq -r '
+      def rows:
+        if type == "array" then .
+        elif type == "object" and (.Items | type) == "array" then .Items
+        else [] end;
+      (.VpcOriginList // .VpcOrigins // []) | rows | .[]? | objects | .Id // empty | select(. != "")
+    ' <<<"${vpcs}" 2>/dev/null || true)
   fi
 
   if streaming="$(aws cloudfront list-streaming-distributions --output json 2>/tmp/cf-rtmp.err)"; then
@@ -381,7 +408,13 @@ cleanup_after_distributions() {
       [[ -z "${setag}" || "${setag}" == "None" ]] && continue
       log "  delete streaming ${sid}"
       try aws cloudfront delete-streaming-distribution --id "${sid}" --if-match "${setag}" || true
-    done < <(jq -r '.StreamingDistributionList.Items[]?.Id' <<<"${streaming}")
+    done < <(jq -r '
+      def rows:
+        if type == "array" then .
+        elif type == "object" and (.Items | type) == "array" then .Items
+        else [] end;
+      (.StreamingDistributionList // []) | rows | .[]? | objects | .Id // empty | select(. != "")
+    ' <<<"${streaming}" 2>/dev/null || true)
   fi
 }
 
