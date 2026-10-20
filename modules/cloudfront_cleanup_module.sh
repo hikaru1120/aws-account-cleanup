@@ -196,11 +196,11 @@ drain_distributions() {
       log "  still deploying after ${elapsed}s: ${wave}"
       return 0
     fi
-    log "  ${wave} still deploying (${elapsed}s); checking the others"
     next=""
-    while read -r id; do
+    for id in ${wave}; do
       [[ -z "${id}" ]] && continue
       IFS=$'\t' read -r status enabled policy < <(dist_snapshot "${id}")
+      log "    ${id} Status=${status} Enabled=${enabled} (${elapsed}s)"
       if ready_to_delete "${status}" "${enabled}" "${policy}"; then
         delete_distribution "${id}" || next+="${id} "
       elif [[ "${status}" == "Deployed" ]]; then
@@ -216,7 +216,7 @@ drain_distributions() {
       else
         next+="${id} "
       fi
-    done <<<"${wave}"
+    done
     wave="${next}"
     [[ -z "${wave// /}" ]] && break
     sleep 15
