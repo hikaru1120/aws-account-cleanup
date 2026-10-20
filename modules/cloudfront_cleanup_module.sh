@@ -68,6 +68,41 @@ try() {
   fi
 }
 
+# CloudFront config APIs throttle hard. CLI retries make that worse, so retry here.
+cf_once() {
+  local out
+  if out="$(AWS_MAX_ATTEMPTS=1 AWS_RETRY_MODE=standard aws cloudfront "$@" 2>&1)"; then
+    printf '%s\n' "${out}"
+    return 0
+  fi
+  printf '%s\n' "${out}" > /tmp/cf-api.err
+  if [[ "${out}" == *Throttl* || "${out}" == *Rate\ exceeded* || "${out}" == *TooManyRequests* || "${out}" == *RequestLimitExceeded* ]]; then
+    return 2
+  fi
+  return 1
+}
+
+cf_retry() {
+  local attempt=0 wait_s=8 rc
+  while (( attempt < 8 )); do
+    if cf_once "$@"; then
+      return 0
+    fi
+    rc=$?
+    if [[ "${rc}" -ne 2 ]]; then
+      return 1
+    fi
+    printf '%s\n' "[$(date '+%F %T')] [${MODULE_NAME}] throttled, retry in ${wait_s}s" >&2
+    sleep "${wait_s}"
+    if [[ "${wait_s}" -lt 60 ]]; then
+      wait_s=$((wait_s * 2))
+    fi
+    attempt=$((attempt + 1))
+  done
+  echo "still throttled" > /tmp/cf-api.err
+  return 2
+}
+
 list_cf_subs() {
   local token="" page acc='[]'
   while :; do
@@ -153,9 +188,9 @@ ready_to_delete() {
   [[ "${status}" == "Deployed" && ( "${enabled}" == "False" || "${enabled}" == "false" ) && ( -z "${policy}" || "${policy}" == "None" ) ]]
 }
 
-# 0 = ready to delete, 2 = update sent or still deploying, 1 = update failed.
+# 0 = ready to delete, 2 = update sent, still deploying, or throttled, 1 = update failed.
 submit_disable() {
-  local id="$1" status="" enabled="" policy="" cfg etag
+  local id="$1" status="" enabled="" policy="" cfg etag rc
   IFS=$'\t' read -r status enabled policy < <(dist_snapshot "${id}")
   if ready_to_delete "${status}" "${enabled}" "${policy}"; then
     return 0
@@ -163,14 +198,30 @@ submit_disable() {
   if [[ "${status}" != "Deployed" ]]; then
     return 2
   fi
-  cfg="$(aws cloudfront get-distribution-config --id "${id}" --output json 2>/tmp/cf-dist.err)" || {
-    fail "$(cat /tmp/cf-dist.err 2>/dev/null || true)" get-distribution-config "${id}" || true
+  rc=0
+  cfg="$(cf_retry get-distribution-config --id "${id}" --output json)" || rc=$?
+  if [[ "${rc}" -eq 2 ]]; then
+    log "  throttled reading ${id}; will retry"
+    return 2
+  fi
+  if [[ "${rc}" -ne 0 || -z "${cfg}" ]]; then
+    fail "$(cat /tmp/cf-api.err 2>/dev/null || true)" get-distribution-config "${id}" || true
     return 1
-  }
+  fi
   etag="$(jq -r '.ETag' <<<"${cfg}")"
   log "  disable ${id}"
   jq '.DistributionConfig | .Enabled=false | del(.ContinuousDeploymentPolicyId)' <<<"${cfg}" >"/tmp/cf-${id}.json"
-  try aws cloudfront update-distribution --id "${id}" --if-match "${etag}" --distribution-config "file:///tmp/cf-${id}.json" || return 1
+  rc=0
+  cf_retry update-distribution --id "${id}" --if-match "${etag}" --distribution-config "file:///tmp/cf-${id}.json" >/dev/null || rc=$?
+  if [[ "${rc}" -eq 2 ]]; then
+    log "  throttled disabling ${id}; will retry"
+    return 2
+  fi
+  if [[ "${rc}" -ne 0 ]]; then
+    fail "$(cat /tmp/cf-api.err 2>/dev/null || true)" update-distribution "${id}" || true
+    return 1
+  fi
+  sleep 2
   return 2
 }
 
@@ -237,13 +288,26 @@ drain_distributions() {
 }
 
 delete_distribution() {
-  local id="$1" etag out
-  etag="$(aws cloudfront get-distribution-config --id "${id}" --query 'ETag' --output text 2>/dev/null || true)"
-  [[ -z "${etag}" || "${etag}" == "None" ]] && return 1
+  local id="$1" etag out rc=0
+  etag="$(cf_retry get-distribution-config --id "${id}" --query 'ETag' --output text)" || rc=$?
+  if [[ "${rc}" -eq 2 ]]; then
+    log "  throttled reading ${id}; will retry delete"
+    return 1
+  fi
+  if [[ "${rc}" -ne 0 || -z "${etag}" || "${etag}" == "None" ]]; then
+    return 1
+  fi
   log "  delete ${id}"
-  if out="$(aws cloudfront delete-distribution --id "${id}" --if-match "${etag}" 2>&1)"; then
+  rc=0
+  cf_retry delete-distribution --id "${id}" --if-match "${etag}" >/dev/null || rc=$?
+  if [[ "${rc}" -eq 0 ]]; then
     return 0
   fi
+  if [[ "${rc}" -eq 2 ]]; then
+    log "  throttled deleting ${id}; will retry"
+    return 1
+  fi
+  out="$(cat /tmp/cf-api.err 2>/dev/null || true)"
   if [[ "${out}" == *[Pp]ricing*[Pp]lan* || "${out}" == *ubscribed* ]]; then
     plan_held=$((plan_held + 1))
     [[ -z "${plan_held_err}" ]] && plan_held_err="$(printf '%s' "${out}" | tr '\n' ' ')"
