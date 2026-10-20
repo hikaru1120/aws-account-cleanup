@@ -93,7 +93,6 @@ cancel_plans() {
     change="$(jq -r '.scheduledChange.changeType // empty' <<<"${sub}")"
     [[ -z "${arn}" || -z "${etag}" ]] && continue
     if [[ "${change}" == "CANCELLATION" ]]; then
-      log "  plan already cancelling tier=${tier} ${arn}"
       continue
     fi
     if [[ "${change}" == "DOWNGRADE" ]]; then
@@ -208,9 +207,18 @@ delete_tenants() {
     else
       page="$(aws cloudfront list-distribution-tenants --output json 2>/tmp/cf-tenant.err)" || return 1
     fi
-    items="$(jq -c --argjson page "${page}" '. + ($page.DistributionTenantList.Items // [])' <<<"${items}")"
+    items="$(jq -c --argjson page "${page}" '
+      def tenants:
+        if ($page.DistributionTenantList | type) == "array" then $page.DistributionTenantList
+        elif ($page.DistributionTenantList | type) == "object" then ($page.DistributionTenantList.Items // [])
+        else ($page.Items // []) end;
+      . + tenants
+    ' <<<"${items}")" || return 1
     prev="${marker}"
-    marker="$(jq -r '.DistributionTenantList.NextMarker // .NextMarker // empty' <<<"${page}")"
+    marker="$(jq -r '
+      if (.DistributionTenantList | type) == "object" then (.DistributionTenantList.NextMarker // .NextMarker // empty)
+      else (.NextMarker // empty) end
+    ' <<<"${page}" 2>/dev/null || true)"
     [[ -z "${marker}" || "${marker}" == "${prev}" ]] && break
   done
   while read -r tid; do
@@ -366,19 +374,17 @@ if ! wait_plans_settled; then
 fi
 
 locked=" "
-while read -r row; do
-  [[ -z "${row}" ]] && continue
-  dist_id="${row%%$'\t'*}"
-  rest="${row#*$'\t'}"
-  tier="${rest%%$'\t'*}"
-  when="${rest#*$'\t'}"
+while read -r dist_id; do
+  [[ -z "${dist_id}" ]] && continue
   locked+="${dist_id} "
-  log "  skip ${dist_id} plan=${tier} pay-as-you-go at ${when}; re-run after that"
-done < <(jq -r '.[] | . as $s | ($s.resourceArns // [])[] | select(test("distribution/")) | "\(split("/")[-1])\t\($s.planTier // "unknown")\t\($s.scheduledChange.effectiveDate // $s.status // "pending")"' <<<"${subs}")
-
-jq -r '.[] | (.resourceArns // [])[] | select(test("distribution/")|not)' <<<"${subs}" | while read -r arn; do
-  [[ -n "${arn}" ]] && log "  plan resource left in place ${arn}"
-done || true
+done < <(jq -r '.[] | (.resourceArns // [])[] | select(test("distribution/")) | split("/")[-1]' <<<"${subs}")
+paid="$(jq -r '[.[] | select(.planTier != "FREE" and .planTier != null)] | length' <<<"${subs}")"
+when="$(jq -r '[.[] | .scheduledChange.effectiveDate // empty] | unique | .[0] // "end of the billing period"' <<<"${subs}")"
+if [[ "${paid}" != "0" ]]; then
+  log "  ${paid} paid plans stay active until ${when}. Cancellation is scheduled; AWS still reports planTier as PRO and rejects delete before that time."
+fi
+other="$(jq -r '[.[] | (.resourceArns // [])[] | select(test("distribution/")|not)] | length' <<<"${subs}")"
+[[ "${other}" != "0" ]] && log "  ${other} bundled WAF or other plan resources left in place"
 
 plan_blocks() {
   [[ "${locked}" == *" $1 "* || "${subs}" == *"distribution/${1}\""* ]]
